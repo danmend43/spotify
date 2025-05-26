@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Upload, ImageIcon, Music, LogIn, LogOut, Play, Pause, Copy } from "lucide-react"
+import { Music, LogIn, LogOut, Play, Pause } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -47,9 +47,7 @@ interface SpotifyAudioAnalysis {
 }
 
 export default function PhotoBeatBorder() {
-  const [imageFile, setImageFile] = useState<File | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [meydaLoaded, setMeydaLoaded] = useState(false)
 
@@ -223,11 +221,14 @@ export default function PhotoBeatBorder() {
               }
 
               setIsSpotifyPlaying(true)
-              setCurrentProgress(data.progress_ms || 0)
+              const newProgress = data.progress_ms || 0
+              setCurrentProgress(newProgress)
 
-              // Inicia sincronização de batidas se temos análise
-              if (audioAnalysis) {
-                syncBeatsWithProgress(data.progress_ms || 0)
+              // Ressincroniza batidas a cada 2 segundos ou se houve mudança significativa
+              const progressDiff = Math.abs(newProgress - currentProgress)
+              if (audioAnalysis && (progressDiff > 2000 || beatTimeoutsRef.current.length === 0)) {
+                console.log("🔄 Ressincronizando batidas...")
+                syncBeatsWithProgress(newProgress)
               }
             } else {
               setIsSpotifyPlaying(false)
@@ -241,7 +242,7 @@ export default function PhotoBeatBorder() {
         } catch (error) {
           console.error("❌ Erro ao buscar música atual:", error)
         }
-      }, 500) // Mudado de 1000 para 500ms para melhor sincronização
+      }, 250) // Mudado para 250ms para melhor precisão
 
       return () => {
         if (spotifyIntervalRef.current) {
@@ -249,7 +250,7 @@ export default function PhotoBeatBorder() {
         }
       }
     }
-  }, [spotifyToken, currentTrack, audioAnalysis])
+  }, [spotifyToken, currentTrack, audioAnalysis, currentProgress])
 
   // Busca características de áudio do Spotify (alternativa mais acessível)
   const fetchAudioAnalysis = async (trackId: string) => {
@@ -335,33 +336,43 @@ export default function PhotoBeatBorder() {
     stopAllBeats()
 
     const progressSeconds = progressMs / 1000
+    const currentTime = Date.now()
+
     console.log("🎵 Sincronizando batidas a partir de:", progressSeconds, "segundos")
 
-    // Encontra batidas futuras (próximos 5 segundos para melhor performance)
+    // Encontra batidas futuras (próximos 10 segundos)
     const upcomingBeats = audioAnalysis.beats.filter((beat) => {
       const beatTime = beat.start
-      return beatTime > progressSeconds && beatTime < progressSeconds + 5
+      return beatTime > progressSeconds && beatTime < progressSeconds + 10
     })
 
     console.log("🥁 Batidas próximas encontradas:", upcomingBeats.length)
 
-    // Agenda as batidas com melhor precisão
+    // Agenda as batidas com compensação de latência
     upcomingBeats.forEach((beat, index) => {
-      const delay = (beat.start - progressSeconds) * 1000
+      const beatTimeMs = beat.start * 1000
+      const delay = beatTimeMs - progressMs
 
-      // Só agenda se for nos próximos 5 segundos e delay positivo
-      if (delay > 0 && delay < 5000) {
+      // Compensação de latência (ajuste baseado na performance)
+      const latencyCompensation = 50 // ms
+      const adjustedDelay = Math.max(0, delay - latencyCompensation)
+
+      // Só agenda se for nos próximos 10 segundos e delay positivo
+      if (adjustedDelay >= 0 && adjustedDelay < 10000) {
         const timeout = setTimeout(() => {
-          console.log(`🥁 BATIDA! Tempo: ${beat.start}s, Confiança: ${beat.confidence.toFixed(2)}`)
-          pulseOnBeat(beat.confidence)
-        }, delay)
+          // Verifica se ainda está tocando antes de pulsar
+          if (isSpotifyPlaying) {
+            console.log(`🥁 BATIDA! Tempo: ${beat.start}s, Confiança: ${beat.confidence.toFixed(2)}`)
+            pulseOnBeat(beat.confidence)
+          }
+        }, adjustedDelay)
 
         beatTimeoutsRef.current.push(timeout)
 
         // Log das primeiras batidas para debug
-        if (index < 3) {
+        if (index < 5) {
           console.log(
-            `🥁 Batida ${index + 1}: tempo=${beat.start.toFixed(2)}s, delay=+${delay.toFixed(0)}ms, confiança=${beat.confidence.toFixed(2)}`,
+            `🥁 Batida ${index + 1}: tempo=${beat.start.toFixed(2)}s, delay=${adjustedDelay.toFixed(0)}ms, confiança=${beat.confidence.toFixed(2)}`,
           )
         }
       }
@@ -515,21 +526,6 @@ export default function PhotoBeatBorder() {
     }
   }
 
-  const handleImageUpload = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (file && file.type.startsWith("image/")) {
-        setImageFile(file)
-        if (imageUrl) {
-          URL.revokeObjectURL(imageUrl)
-        }
-        const url = URL.createObjectURL(file)
-        setImageUrl(url)
-      }
-    },
-    [imageUrl],
-  )
-
   const handleAudioUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
@@ -633,9 +629,6 @@ export default function PhotoBeatBorder() {
     }
     if (spotifyUser?.images?.[0]?.url) {
       return spotifyUser.images[0].url
-    }
-    if (imageUrl) {
-      return imageUrl
     }
     return null
   }
@@ -752,7 +745,7 @@ export default function PhotoBeatBorder() {
                 backgroundPosition: "center",
               }}
             >
-              {!displayImage && <ImageIcon className="w-16 h-16 text-gray-400" />}
+              {!displayImage && <Music className="w-16 h-16 text-gray-400" />}
             </div>
 
             {/* Borda com efeito de onda */}
@@ -774,34 +767,6 @@ export default function PhotoBeatBorder() {
             <div>
               <label className="block text-white text-sm font-medium mb-2">Spotify</label>
 
-              <div className="mb-4 p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
-                <p className="text-blue-400 text-sm mb-2">🔗 Configure EXATAMENTE esta URL no Spotify Dashboard:</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
-                    https://spotify-eight-green.vercel.app/api/spotify/callback
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/api/spotify/callback")}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-                <p className="text-gray-400 text-xs mt-2">
-                  ✅ Agora usando fluxo de código (response_type=code) com backend
-                  <br />
-                  1. Vá em developer.spotify.com/dashboard
-                  <br />
-                  2. Clique no seu app → Edit Settings
-                  <br />
-                  3. Em "Redirect URIs", adicione a URL acima
-                  <br />
-                  4. Clique Save
-                </p>
-              </div>
-
               {!spotifyToken ? (
                 <Button onClick={handleSpotifyLogin} className="w-full bg-green-600 hover:bg-green-700 text-white">
                   <LogIn className="w-4 h-4 mr-2" />
@@ -813,34 +778,6 @@ export default function PhotoBeatBorder() {
                   Desconectar Spotify
                 </Button>
               )}
-            </div>
-
-            {/* Separador */}
-            <div className="flex items-center">
-              <div className="flex-1 border-t border-gray-600"></div>
-              <span className="px-3 text-gray-400 text-sm">ou</span>
-              <div className="flex-1 border-t border-gray-600"></div>
-            </div>
-
-            {/* Upload de Imagem */}
-            <div>
-              <label className="block text-white text-sm font-medium mb-2">Foto</label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  id="image-upload"
-                />
-                <label
-                  htmlFor="image-upload"
-                  className="flex items-center justify-center p-4 border-2 border-dashed border-gray-600 rounded-lg hover:border-gray-500 transition-colors cursor-pointer"
-                >
-                  <Upload className="w-5 h-5 text-gray-400 mr-2" />
-                  <span className="text-gray-400 text-sm">{imageFile ? imageFile.name : "Enviar foto"}</span>
-                </label>
-              </div>
             </div>
 
             {/* Upload de Áudio */}
