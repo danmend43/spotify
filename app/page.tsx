@@ -46,7 +46,7 @@ interface SpotifyAudioAnalysis {
   bars: any[]
 }
 
-export default function PhotoBeatBorder() {
+export default function AudioBeatDetector() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
@@ -67,7 +67,6 @@ export default function PhotoBeatBorder() {
   const meydaAnalyzerRef = useRef<any>(null)
   const borderRef = useRef<HTMLDivElement | null>(null)
   const spotifyIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const pulseIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const beatTimeoutsRef = useRef<NodeJS.Timeout[]>([])
 
   // Carrega Meyda quando o componente monta
@@ -140,7 +139,6 @@ export default function PhotoBeatBorder() {
       }
 
       alert(errorMessage)
-      // Remove parâmetros da URL
       window.history.replaceState({}, document.title, window.location.pathname)
     }
 
@@ -149,7 +147,6 @@ export default function PhotoBeatBorder() {
       localStorage.setItem("spotify_token", accessToken)
       setSpotifyToken(accessToken)
       fetchSpotifyUser(accessToken)
-      // Remove parâmetros da URL
       window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
@@ -165,7 +162,6 @@ export default function PhotoBeatBorder() {
         volume: 0.5,
       })
 
-      // Eventos do player
       player.addListener("ready", ({ device_id }: { device_id: string }) => {
         console.log("✅ Spotify Player pronto:", device_id)
       })
@@ -180,7 +176,6 @@ export default function PhotoBeatBorder() {
           setIsSpotifyPlaying(!state.paused)
           setCurrentProgress(state.position)
           console.log("🎵 Música atual:", state.track_window.current_track.name)
-          console.log("🎵 Progresso:", state.position, "ms")
         }
       })
 
@@ -214,18 +209,15 @@ export default function PhotoBeatBorder() {
             const data = await response.json()
 
             if (data && data.item && data.is_playing) {
-              // Verifica se é uma música nova
               if (!currentTrack || currentTrack.id !== data.item.id) {
                 console.log("🎵 Nova música detectada:", data.item.name)
                 setCurrentTrack(data.item)
-                // Busca análise de áudio para a nova música
                 await fetchAudioAnalysis(data.item.id)
               }
 
               setIsSpotifyPlaying(true)
               setCurrentProgress(data.progress_ms || 0)
 
-              // Inicia sincronização de batidas se temos análise
               if (audioAnalysis) {
                 syncBeatsWithProgress(data.progress_ms || 0)
               }
@@ -241,7 +233,7 @@ export default function PhotoBeatBorder() {
         } catch (error) {
           console.error("❌ Erro ao buscar música atual:", error)
         }
-      }, 500) // Mudado de 1000 para 500ms para melhor sincronização
+      }, 500)
 
       return () => {
         if (spotifyIntervalRef.current) {
@@ -251,14 +243,13 @@ export default function PhotoBeatBorder() {
     }
   }, [spotifyToken, currentTrack, audioAnalysis])
 
-  // Busca características de áudio do Spotify (alternativa mais acessível)
+  // Busca análise de áudio do Spotify
   const fetchAudioAnalysis = async (trackId: string) => {
     if (!spotifyToken) return
 
     try {
-      console.log("🔍 Buscando características de áudio para:", trackId)
+      console.log("🔍 Buscando análise de áudio para:", trackId)
 
-      // Tenta primeiro a análise completa
       let response = await fetch(`https://api.spotify.com/v1/audio-analysis/${trackId}`, {
         headers: {
           Authorization: `Bearer ${spotifyToken}`,
@@ -273,7 +264,6 @@ export default function PhotoBeatBorder() {
         return
       }
 
-      // Se falhar, usa audio-features para estimar batidas
       console.log("⚠️ Análise completa falhou, usando audio-features...")
       response = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
         headers: {
@@ -285,10 +275,7 @@ export default function PhotoBeatBorder() {
         const features = await response.json()
         console.log("✅ Audio features recebidas!")
         console.log("🎵 Tempo:", features.tempo, "BPM")
-        console.log("🎵 Energia:", features.energy)
-        console.log("🎵 Dançabilidade:", features.danceability)
 
-        // Cria batidas estimadas baseadas no tempo
         const estimatedBeats = generateBeatsFromTempo(features.tempo, currentTrack?.duration_ms || 180000)
 
         setAudioAnalysis({
@@ -313,14 +300,14 @@ export default function PhotoBeatBorder() {
   // Gera batidas estimadas baseadas no tempo (BPM)
   const generateBeatsFromTempo = (tempo: number, durationMs: number) => {
     const beats = []
-    const beatInterval = 60 / tempo // segundos entre batidas
+    const beatInterval = 60 / tempo
     const durationSeconds = durationMs / 1000
 
     for (let time = 0; time < durationSeconds; time += beatInterval) {
       beats.push({
         start: time,
         duration: beatInterval,
-        confidence: 0.7 + Math.random() * 0.3, // Confiança simulada entre 0.7-1.0
+        confidence: 0.7 + Math.random() * 0.3,
       })
     }
 
@@ -331,13 +318,11 @@ export default function PhotoBeatBorder() {
   const syncBeatsWithProgress = (progressMs: number) => {
     if (!audioAnalysis?.beats || !isSpotifyPlaying) return
 
-    // Limpa timeouts anteriores
     stopAllBeats()
 
     const progressSeconds = progressMs / 1000
     console.log("🎵 Sincronizando batidas a partir de:", progressSeconds, "segundos")
 
-    // Encontra batidas futuras (próximos 5 segundos para melhor performance)
     const upcomingBeats = audioAnalysis.beats.filter((beat) => {
       const beatTime = beat.start
       return beatTime > progressSeconds && beatTime < progressSeconds + 5
@@ -345,11 +330,9 @@ export default function PhotoBeatBorder() {
 
     console.log("🥁 Batidas próximas encontradas:", upcomingBeats.length)
 
-    // Agenda as batidas com melhor precisão
     upcomingBeats.forEach((beat, index) => {
       const delay = (beat.start - progressSeconds) * 1000
 
-      // Só agenda se for nos próximos 5 segundos e delay positivo
       if (delay > 0 && delay < 5000) {
         const timeout = setTimeout(() => {
           console.log(`🥁 BATIDA! Tempo: ${beat.start}s, Confiança: ${beat.confidence.toFixed(2)}`)
@@ -358,7 +341,6 @@ export default function PhotoBeatBorder() {
 
         beatTimeoutsRef.current.push(timeout)
 
-        // Log das primeiras batidas para debug
         if (index < 3) {
           console.log(
             `🥁 Batida ${index + 1}: tempo=${beat.start.toFixed(2)}s, delay=+${delay.toFixed(0)}ms, confiança=${beat.confidence.toFixed(2)}`,
@@ -388,47 +370,39 @@ export default function PhotoBeatBorder() {
 
     console.log(`🔥 PULSE! Confiança: ${confidence.toFixed(2)}`)
 
-    // Intensidade baseada na confiança da batida (0-1)
-    const baseIntensity = Math.max(confidence * 40, 15) // Aumentado: mínimo 15, máximo 40
-    const glowSize = baseIntensity * 3 // Aumentado multiplicador
-    const opacity = 0.8 + confidence * 0.2 // Aumentado opacidade base
+    const baseIntensity = Math.max(confidence * 40, 15)
+    const glowSize = baseIntensity * 3
+    const opacity = 0.8 + confidence * 0.2
 
-    // Cores mais vibrantes baseadas na intensidade
     let red, green, blue
     if (confidence > 0.8) {
-      // Batida muito forte - branco/amarelo brilhante
       red = 255
       green = 255
       blue = 200
     } else if (confidence > 0.6) {
-      // Batida forte - laranja vibrante
       red = 255
       green = 100
       blue = 0
     } else if (confidence > 0.4) {
-      // Batida média - vermelho brilhante
       red = 255
       green = 0
       blue = 100
     } else {
-      // Batida fraca - vermelho
       red = 255
       green = 50
       blue = 50
     }
 
-    // Aplica o efeito com múltiplas camadas
     borderRef.current.style.boxShadow = `
-    0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
-    0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.7}),
-    0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.4}),
-    0 0 ${glowSize * 4}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.2})
-  `
+      0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
+      0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.7}),
+      0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.4}),
+      0 0 ${glowSize * 4}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.2})
+    `
     borderRef.current.style.borderColor = `rgba(${red}, ${green}, ${blue}, ${opacity})`
-    borderRef.current.style.borderWidth = `${4 + confidence * 4}px` // Borda mais grossa na batida
+    borderRef.current.style.borderWidth = `${4 + confidence * 4}px`
 
-    // Volta ao normal após um tempo baseado na confiança
-    const duration = 150 + confidence * 250 // 150-400ms (aumentado)
+    const duration = 150 + confidence * 250
     setTimeout(() => {
       if (borderRef.current) {
         borderRef.current.style.boxShadow = "none"
@@ -467,7 +441,7 @@ export default function PhotoBeatBorder() {
 
   const handleSpotifyLogin = () => {
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
-    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback" // ✅ Volta para API route
+    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback"
 
     localStorage.removeItem("spotify_token")
 
@@ -488,16 +462,13 @@ export default function PhotoBeatBorder() {
 
     const authUrl = new URL("https://accounts.spotify.com/authorize")
     authUrl.searchParams.append("client_id", clientId)
-    authUrl.searchParams.append("response_type", "code") // ✅ Volta para code
+    authUrl.searchParams.append("response_type", "code")
     authUrl.searchParams.append("redirect_uri", redirectUri)
     authUrl.searchParams.append("scope", scopes)
     authUrl.searchParams.append("state", state)
     authUrl.searchParams.append("show_dialog", "true")
 
     console.log("🔍 URL de autenticação:", authUrl.toString())
-    console.log("🔍 Redirect URI sendo usado:", redirectUri)
-    console.log("🔍 Usando fluxo de código (response_type=code)")
-
     window.location.href = authUrl.toString()
   }
 
@@ -538,7 +509,6 @@ export default function PhotoBeatBorder() {
       setAudioFile(file)
 
       try {
-        // Para análise do Spotify
         stopAllBeats()
 
         if (sourceRef.current) {
@@ -549,7 +519,6 @@ export default function PhotoBeatBorder() {
           meydaAnalyzerRef.current.stop()
         }
 
-        // Setup Audio Context
         if (!audioContextRef.current) {
           audioContextRef.current = new AudioContext()
         }
@@ -557,12 +526,10 @@ export default function PhotoBeatBorder() {
         const arrayBuffer = await file.arrayBuffer()
         const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer)
 
-        // Cria source
         const source = audioContextRef.current.createBufferSource()
         source.buffer = audioBuffer
         sourceRef.current = source
 
-        // Configura Meyda
         const meydaAnalyzer = window.Meyda.createMeydaAnalyzer({
           audioContext: audioContextRef.current,
           source: source,
@@ -605,7 +572,6 @@ export default function PhotoBeatBorder() {
 
         meydaAnalyzerRef.current = meydaAnalyzer
 
-        // Conecta e inicia
         source.connect(audioContextRef.current.destination)
         meydaAnalyzer.start()
         source.start()

@@ -43,7 +43,6 @@ export default function SpotifyCallback() {
         addDebugInfo("✅ Token Spotify salvo no localStorage!")
         addDebugInfo(`✅ Token (primeiros 20 chars): ${token.substring(0, 20)}...`)
 
-        // Pequeno delay para garantir que o token foi salvo
         setTimeout(() => {
           addDebugInfo("🔄 Redirecionando para página principal...")
           router.push("/")
