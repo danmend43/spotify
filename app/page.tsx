@@ -467,7 +467,7 @@ export default function PhotoBeatBorder() {
 
   const handleSpotifyLogin = () => {
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
-    const redirectUri = "https://spotify-eight-green.vercel.app/spotify/callback" // URL exata
+    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback" // ✅ Volta para API route
 
     localStorage.removeItem("spotify_token")
 
@@ -488,7 +488,7 @@ export default function PhotoBeatBorder() {
 
     const authUrl = new URL("https://accounts.spotify.com/authorize")
     authUrl.searchParams.append("client_id", clientId)
-    authUrl.searchParams.append("response_type", "token")
+    authUrl.searchParams.append("response_type", "code") // ✅ Volta para code
     authUrl.searchParams.append("redirect_uri", redirectUri)
     authUrl.searchParams.append("scope", scopes)
     authUrl.searchParams.append("state", state)
@@ -496,6 +496,7 @@ export default function PhotoBeatBorder() {
 
     console.log("🔍 URL de autenticação:", authUrl.toString())
     console.log("🔍 Redirect URI sendo usado:", redirectUri)
+    console.log("🔍 Usando fluxo de código (response_type=code)")
 
     window.location.href = authUrl.toString()
   }
@@ -777,19 +778,19 @@ export default function PhotoBeatBorder() {
                 <p className="text-blue-400 text-sm mb-2">🔗 Configure EXATAMENTE esta URL no Spotify Dashboard:</p>
                 <div className="flex items-center gap-2 mt-1">
                   <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
-                    https://spotify-eight-green.vercel.app/spotify/callback
+                    https://spotify-eight-green.vercel.app/api/spotify/callback
                   </code>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/spotify/callback")}
+                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/api/spotify/callback")}
                     className="h-8 w-8 p-0"
                   >
                     <Copy className="h-3 w-3" />
                   </Button>
                 </div>
                 <p className="text-gray-400 text-xs mt-2">
-                  ⚠️ IMPORTANTE: A URL deve ser EXATAMENTE igual (sem barra no final)
+                  ✅ Agora usando fluxo de código (response_type=code) com backend
                   <br />
                   1. Vá em developer.spotify.com/dashboard
                   <br />
@@ -798,8 +799,6 @@ export default function PhotoBeatBorder() {
                   3. Em "Redirect URIs", adicione a URL acima
                   <br />
                   4. Clique Save
-                  <br />
-                  5. ✅ Agora usando fluxo implícito (response_type=token)
                 </p>
               </div>
 
