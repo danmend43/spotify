@@ -170,6 +170,26 @@ export default function PhotoBeatBorder() {
     }
   }, [spotifyToken, isSpotifyPlaying, meydaLoaded])
 
+  // Detecta quando volta do callback do Spotify
+  useEffect(() => {
+    // Verifica se acabou de voltar do callback
+    const urlParams = new URLSearchParams(window.location.search)
+    const fromCallback = urlParams.get("from") === "callback"
+
+    if (fromCallback) {
+      // Remove o parâmetro da URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+
+      // Verifica se tem token salvo
+      const token = localStorage.getItem("spotify_token")
+      if (token) {
+        console.log("✅ Token detectado após callback!")
+        setSpotifyToken(token)
+        fetchSpotifyUser(token)
+      }
+    }
+  }, [])
+
   const fetchSpotifyUser = async (token: string) => {
     try {
       const response = await fetch("https://api.spotify.com/v1/me", {
@@ -285,8 +305,12 @@ export default function PhotoBeatBorder() {
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
     const redirectUri = "https://spotify-eight-green.vercel.app/callback"
 
+    console.log("🔍 Iniciando login do Spotify...")
     console.log("🔍 Client ID:", clientId)
     console.log("🔗 Redirect URI:", redirectUri)
+
+    // Limpa token anterior se existir
+    localStorage.removeItem("spotify_token")
 
     const scopes = [
       "user-read-playback-state",
@@ -297,15 +321,22 @@ export default function PhotoBeatBorder() {
       "user-read-private",
     ].join(" ")
 
-    const authUrl =
-      `https://accounts.spotify.com/authorize?` +
-      `client_id=${clientId}&` +
-      `response_type=token&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `scope=${encodeURIComponent(scopes)}`
+    // Gera um state aleatório para segurança
+    const state = Math.random().toString(36).substring(2, 15)
+    localStorage.setItem("spotify_auth_state", state)
 
-    console.log("🚀 URL completa:", authUrl)
-    window.location.href = authUrl
+    const authUrl = new URL("https://accounts.spotify.com/authorize")
+    authUrl.searchParams.append("client_id", clientId)
+    authUrl.searchParams.append("response_type", "token")
+    authUrl.searchParams.append("redirect_uri", redirectUri)
+    authUrl.searchParams.append("scope", scopes)
+    authUrl.searchParams.append("state", state)
+    authUrl.searchParams.append("show_dialog", "true") // Força mostrar dialog
+
+    console.log("🚀 URL de autorização:", authUrl.toString())
+
+    // Redireciona para o Spotify
+    window.location.href = authUrl.toString()
   }
 
   const handleSpotifyLogout = () => {
@@ -531,7 +562,7 @@ export default function PhotoBeatBorder() {
 
               {/* Informações de configuração */}
               <div className="mb-4 p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
-                <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify :D - Dashboard:</p>
+                <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify Dashboard:</p>
                 <div className="flex items-center gap-2 mt-1">
                   <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
                     https://spotify-eight-green.vercel.app/callback
@@ -539,9 +570,7 @@ export default function PhotoBeatBorder() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      copyToClipboard("https://spotify-eight-green.vercel.app/callback")
-                    }
+                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/callback")}
                     className="h-8 w-8 p-0"
                   >
                     <Copy className="h-3 w-3" />
