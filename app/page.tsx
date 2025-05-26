@@ -420,7 +420,7 @@ export default function PhotoBeatBorder() {
 
   const handleSpotifyLogin = () => {
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
-    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback"
+    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback" // Mantém a API route
 
     localStorage.removeItem("spotify_token")
 
@@ -721,7 +721,7 @@ export default function PhotoBeatBorder() {
               <label className="block text-white text-sm font-medium mb-2">Spotify</label>
 
               <div className="mb-4 p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
-                <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify Dashboard: :D</p>
+                <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify Dashboard:</p>
                 <div className="flex items-center gap-2 mt-1">
                   <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
                     https://spotify-eight-green.vercel.app/api/spotify/callback
