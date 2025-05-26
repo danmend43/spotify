@@ -251,14 +251,15 @@ export default function PhotoBeatBorder() {
     }
   }, [spotifyToken, currentTrack, audioAnalysis])
 
-  // Busca análise de áudio do Spotify
+  // Busca características de áudio do Spotify (alternativa mais acessível)
   const fetchAudioAnalysis = async (trackId: string) => {
     if (!spotifyToken) return
 
     try {
-      console.log("🔍 Buscando análise de áudio para track:", trackId)
-      console.log("🔍 Buscando análise de áudio para:", trackId)
-      const response = await fetch(`https://api.spotify.com/v1/audio-analysis/${trackId}`, {
+      console.log("🔍 Buscando características de áudio para:", trackId)
+
+      // Tenta primeiro a análise completa
+      let response = await fetch(`https://api.spotify.com/v1/audio-analysis/${trackId}`, {
         headers: {
           Authorization: `Bearer ${spotifyToken}`,
         },
@@ -267,29 +268,63 @@ export default function PhotoBeatBorder() {
       if (response.ok) {
         const analysis = await response.json()
         setAudioAnalysis(analysis)
-        console.log("✅ Análise de áudio recebida!")
+        console.log("✅ Análise completa recebida!")
         console.log("🥁 Batidas encontradas:", analysis.beats?.length || 0)
-        console.log("🎵 Seções:", analysis.sections?.length || 0)
-        console.log("🎶 Segmentos:", analysis.segments?.length || 0)
+        return
+      }
 
-        // Log das primeiras batidas para debug
-        if (analysis.beats?.length > 0) {
-          console.log(
-            "🥁 Primeiras 5 batidas:",
-            analysis.beats.slice(0, 5).map((b) => ({
-              tempo: b.start.toFixed(2) + "s",
-              confiança: b.confidence.toFixed(2),
-            })),
-          )
-        }
+      // Se falhar, usa audio-features para estimar batidas
+      console.log("⚠️ Análise completa falhou, usando audio-features...")
+      response = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
+        headers: {
+          Authorization: `Bearer ${spotifyToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const features = await response.json()
+        console.log("✅ Audio features recebidas!")
+        console.log("🎵 Tempo:", features.tempo, "BPM")
+        console.log("🎵 Energia:", features.energy)
+        console.log("🎵 Dançabilidade:", features.danceability)
+
+        // Cria batidas estimadas baseadas no tempo
+        const estimatedBeats = generateBeatsFromTempo(features.tempo, currentTrack?.duration_ms || 180000)
+
+        setAudioAnalysis({
+          beats: estimatedBeats,
+          sections: [],
+          segments: [],
+          tatums: [],
+          bars: [],
+        })
+
+        console.log("🥁 Batidas estimadas:", estimatedBeats.length)
       } else {
-        console.error("❌ Erro ao buscar análise:", response.status)
+        console.error("❌ Erro ao buscar características:", response.status)
         setAudioAnalysis(null)
       }
     } catch (error) {
       console.error("❌ Erro na análise de áudio:", error)
       setAudioAnalysis(null)
     }
+  }
+
+  // Gera batidas estimadas baseadas no tempo (BPM)
+  const generateBeatsFromTempo = (tempo: number, durationMs: number) => {
+    const beats = []
+    const beatInterval = 60 / tempo // segundos entre batidas
+    const durationSeconds = durationMs / 1000
+
+    for (let time = 0; time < durationSeconds; time += beatInterval) {
+      beats.push({
+        start: time,
+        duration: beatInterval,
+        confidence: 0.7 + Math.random() * 0.3, // Confiança simulada entre 0.7-1.0
+      })
+    }
+
+    return beats
   }
 
   // Sincroniza batidas com o progresso atual da música
@@ -443,6 +478,9 @@ export default function PhotoBeatBorder() {
       "streaming",
       "user-read-email",
       "user-read-private",
+      "user-read-recently-played",
+      "playlist-read-private",
+      "playlist-read-collaborative",
     ].join(" ")
 
     const state = Math.random().toString(36).substring(2, 15)
