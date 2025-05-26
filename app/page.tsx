@@ -52,7 +52,6 @@ export default function AudioBeatDetector() {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [meydaLoaded, setMeydaLoaded] = useState(false)
-  const [backgroundStyle, setBackgroundStyle] = useState<string>("bg-gray-900")
 
   // Spotify states
   const [spotifyToken, setSpotifyToken] = useState<string | null>(null)
@@ -363,9 +362,6 @@ export default function AudioBeatDetector() {
       borderRef.current.style.boxShadow = "none"
       borderRef.current.style.borderColor = "rgb(239, 68, 68)"
     }
-
-    // Reset do fundo
-    setBackgroundStyle("bg-gray-900")
   }
 
   // Cria efeito visual na batida
@@ -397,13 +393,6 @@ export default function AudioBeatDetector() {
       blue = 50
     }
 
-    // Aplica gradiente animado no fundo
-    setBackgroundStyle(`radial-gradient(circle at 50% 50%, 
-  rgba(${red}, ${green}, ${blue}, ${opacity * 0.3}) 0%, 
-  rgba(${red}, ${green}, ${blue}, ${opacity * 0.1}) 30%, 
-  rgb(17, 24, 39) 70%
-)`)
-
     borderRef.current.style.boxShadow = `
       0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
       0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.7}),
@@ -420,9 +409,6 @@ export default function AudioBeatDetector() {
         borderRef.current.style.borderColor = "rgb(239, 68, 68)"
         borderRef.current.style.borderWidth = "4px"
       }
-
-      // Volta o fundo ao normal
-      setBackgroundStyle("bg-gray-900")
     }, duration)
   }
 
@@ -574,22 +560,11 @@ export default function AudioBeatDetector() {
                 blue = 68
               }
 
-              // Aplica gradiente no fundo para música local também
-              if (intensity > 3) {
-                setBackgroundStyle(`radial-gradient(circle at 50% 50%, 
-        rgba(${red}, ${green}, ${blue}, ${opacity * 0.2}) 0%, 
-        rgba(${red}, ${green}, ${blue}, ${opacity * 0.1}) 30%, 
-        rgb(17, 24, 39) 70%
-      )`)
-              } else {
-                setBackgroundStyle("bg-gray-900")
-              }
-
               borderRef.current.style.boxShadow = `
-      0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
-      0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.5}),
-      0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.3})
-    `
+                0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
+                0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.5}),
+                0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.3})
+              `
               borderRef.current.style.borderColor = `rgba(${red}, ${green}, ${blue}, ${opacity})`
             }
           },
@@ -609,9 +584,6 @@ export default function AudioBeatDetector() {
             borderRef.current.style.boxShadow = "none"
             borderRef.current.style.borderColor = "rgb(239, 68, 68)"
           }
-
-          // Reset do fundo quando música termina
-          setBackgroundStyle("bg-gray-900")
         }
       } catch (error) {
         console.error("❌ Erro ao processar áudio:", error)
@@ -634,14 +606,7 @@ export default function AudioBeatDetector() {
   const displayImage = getDisplayImage()
 
   return (
-    <div
-      className={
-        backgroundStyle === "bg-gray-900"
-          ? "min-h-screen bg-gray-900 flex items-center justify-center p-4"
-          : "min-h-screen flex items-center justify-center p-4"
-      }
-      style={backgroundStyle !== "bg-gray-900" ? { background: backgroundStyle } : {}}
-    >
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-lg space-y-8">
         {/* Status */}
         <div className="text-center space-y-2">
