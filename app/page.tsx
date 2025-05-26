@@ -197,67 +197,80 @@ export default function PhotoBeatBorder() {
 
   // Monitora música atual do Spotify
   useEffect(() => {
-    if (spotifyToken) {
-      console.log("🔍 Iniciando monitoramento do Spotify...")
+    if (!spotifyToken) return
 
-      spotifyIntervalRef.current = setInterval(async () => {
-        try {
-          const response = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
-            headers: {
-              Authorization: `Bearer ${spotifyToken}`,
-            },
-          })
+    console.log("🔍 Iniciando monitoramento do Spotify...")
 
-          if (response.status === 401) {
-            console.error("❌ Token expirado")
-            localStorage.removeItem("spotify_token")
-            setSpotifyToken(null)
-            setSpotifyUser(null)
-            return
-          }
+    const monitorSpotify = async () => {
+      try {
+        const response = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
+          headers: {
+            Authorization: `Bearer ${spotifyToken}`,
+          },
+        })
 
-          if (response.ok && response.status !== 204) {
-            const data = await response.json()
+        if (response.status === 401) {
+          console.error("❌ Token expirado")
+          localStorage.removeItem("spotify_token")
+          setSpotifyToken(null)
+          setSpotifyUser(null)
+          return
+        }
 
-            if (data && data.item && data.is_playing) {
-              // Verifica se é uma música nova
-              if (!currentTrack || currentTrack.id !== data.item.id) {
-                console.log("🎵 Nova música detectada:", data.item.name)
-                setCurrentTrack(data.item)
+        if (response.ok && response.status !== 204) {
+          const data = await response.json()
 
-                // Inicia análise por microfone em vez de buscar API
-                if (!microphoneActive) {
-                  await startMicrophoneAnalysis()
-                }
-              }
+          if (data && data.item && data.is_playing) {
+            // Verifica se é uma música nova
+            if (!currentTrack || currentTrack.id !== data.item.id) {
+              console.log("🎵 Nova música detectada:", data.item.name)
+              setCurrentTrack(data.item)
+            }
 
-              setIsSpotifyPlaying(true)
-              setCurrentProgress(data.progress_ms || 0)
-            } else {
-              setIsSpotifyPlaying(false)
+            setIsSpotifyPlaying(true)
+            setCurrentProgress(data.progress_ms || 0)
+
+            // Inicia microfone apenas se não estiver ativo e Meyda estiver carregado
+            if (!microphoneActive && meydaLoaded) {
+              console.log("🎤 Iniciando análise automática...")
+              await startMicrophoneAnalysis()
+            }
+          } else {
+            setIsSpotifyPlaying(false)
+            if (microphoneActive) {
+              console.log("🔇 Parando análise - música pausada")
               stopMicrophoneAnalysis()
             }
-          } else if (response.status === 204) {
-            setIsSpotifyPlaying(false)
-            setCurrentTrack(null)
+          }
+        } else if (response.status === 204) {
+          setIsSpotifyPlaying(false)
+          setCurrentTrack(null)
+          if (microphoneActive) {
+            console.log("🔇 Parando análise - nenhuma música")
             stopMicrophoneAnalysis()
           }
-        } catch (error) {
-          console.error("❌ Erro ao buscar música atual:", error)
         }
-      }, 1000) // Reduzido para 1 segundo
-
-      return () => {
-        if (spotifyIntervalRef.current) {
-          clearInterval(spotifyIntervalRef.current)
-        }
+      } catch (error) {
+        console.error("❌ Erro ao buscar música atual:", error)
       }
     }
-  }, [spotifyToken, currentTrack, microphoneActive, isSpotifyPlaying, meydaLoaded])
+
+    // Executa imediatamente
+    monitorSpotify()
+
+    // Depois executa a cada 2 segundos
+    spotifyIntervalRef.current = setInterval(monitorSpotify, 2000)
+
+    return () => {
+      if (spotifyIntervalRef.current) {
+        clearInterval(spotifyIntervalRef.current)
+      }
+    }
+  }, [spotifyToken, meydaLoaded]) // Removido dependências que causavam loop
 
   const startMicrophoneAnalysis = async () => {
-    if (!meydaLoaded) {
-      console.log("❌ Meyda não carregado ainda")
+    if (!meydaLoaded || microphoneActive) {
+      console.log("❌ Meyda não carregado ou microfone já ativo")
       return
     }
 
@@ -273,6 +286,7 @@ export default function PhotoBeatBorder() {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
+          sampleRate: 44100,
         },
       })
 
@@ -285,26 +299,49 @@ export default function PhotoBeatBorder() {
 
       const source = audioContextRef.current.createMediaStreamSource(stream)
 
+      // Variáveis para detecção de batida
+      let lastBeatTime = 0
+      const energyHistory: number[] = []
+      const historySize = 43 // ~1 segundo a 43fps
+
       // Configura Meyda para detectar batidas em tempo real
       const meydaAnalyzer = window.Meyda.createMeydaAnalyzer({
         audioContext: audioContextRef.current,
         source: source,
         bufferSize: 1024,
-        featureExtractors: ["rms", "spectralCentroid", "energy"],
+        featureExtractors: ["energy", "rms", "spectralCentroid"],
         callback: (features: any) => {
-          if (features && borderRef.current && isSpotifyPlaying) {
-            // Detecta picos de energia para simular batidas
-            const energy = features.energy || 0
-            const rms = features.rms || 0
-            const spectralCentroid = features.spectralCentroid || 0
+          if (!features || !borderRef.current || !isSpotifyPlaying) return
 
-            // Algoritmo simples de detecção de batida
-            const intensity = (energy * 2 + rms * 10) / 3
-            const isBeat = intensity > 0.15 && spectralCentroid > 1000
+          const currentTime = Date.now()
+          const energy = features.energy || 0
+          const rms = features.rms || 0
+
+          // Adiciona energia ao histórico
+          energyHistory.push(energy)
+          if (energyHistory.length > historySize) {
+            energyHistory.shift()
+          }
+
+          // Calcula média e variância da energia
+          if (energyHistory.length >= historySize) {
+            const avgEnergy = energyHistory.reduce((a, b) => a + b) / energyHistory.length
+            const variance =
+              energyHistory.reduce((sum, val) => sum + Math.pow(val - avgEnergy, 2), 0) / energyHistory.length
+            const threshold = avgEnergy + Math.sqrt(variance) * 1.5
+
+            // Detecta batida se energia atual > threshold e passou tempo suficiente
+            const timeSinceLastBeat = currentTime - lastBeatTime
+            const isBeat = energy > threshold && timeSinceLastBeat > 200 // Mínimo 200ms entre batidas
 
             if (isBeat) {
-              console.log(`🥁 BATIDA DETECTADA! Energia: ${energy.toFixed(3)}, RMS: ${rms.toFixed(3)}`)
-              pulseOnBeat(Math.min(intensity * 2, 1))
+              lastBeatTime = currentTime
+              const confidence = Math.min((energy - avgEnergy) / (threshold - avgEnergy), 1)
+
+              console.log(
+                `🥁 BATIDA! Energia: ${energy.toFixed(3)}, Threshold: ${threshold.toFixed(3)}, Confiança: ${confidence.toFixed(2)}`,
+              )
+              pulseOnBeat(confidence)
             }
           }
         },
