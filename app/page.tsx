@@ -688,7 +688,6 @@ export default function AudioBeatDetector() {
           {!currentTrack && spotifyToken && (
             <div className="text-center bg-gray-800/30 rounded-lg p-4 border border-gray-600">
               <div className="text-gray-400 text-sm">🔍 Nenhuma música detectada</div>
-              <div className="text-gray-500 text-xs mt-1">Toque uma música no Spotify para sincronizar</div>
             </div>
           )}
         </div>
