@@ -28,6 +28,7 @@ interface SpotifyUser {
   id: string
   display_name: string
   images: { url: string }[]
+  email?: string
 }
 
 export default function PhotoBeatBorder() {
@@ -168,7 +169,7 @@ export default function PhotoBeatBorder() {
     }
   }, [spotifyToken, spotifyPlayer])
 
-  // Monitora música atual do Spotify
+  // Monitora música atual do Spotify (melhorado)
   useEffect(() => {
     if (spotifyToken) {
       console.log("🔍 Iniciando monitoramento do Spotify...")
@@ -187,13 +188,23 @@ export default function PhotoBeatBorder() {
 
           if (response.ok && response.status !== 204) {
             const data = await response.json()
-            console.log("🔍 Dados recebidos:", data)
+            console.log("🔍 Dados recebidos:", {
+              is_playing: data?.is_playing,
+              track_name: data?.item?.name,
+              artists: data?.item?.artists?.map((a) => a.name),
+              album: data?.item?.album?.name,
+              preview_url: !!data?.item?.preview_url,
+              album_images: data?.item?.album?.images?.length || 0,
+            })
 
             if (data && data.item && data.is_playing) {
               setCurrentTrack(data.item)
               setIsSpotifyPlaying(true)
               console.log("🎵 Música tocando:", data.item.name)
-              console.log("🎵 Preview URL:", data.item.preview_url)
+              console.log("🎵 Artistas:", data.item.artists.map((a) => a.name).join(", "))
+              console.log("🎵 Álbum:", data.item.album.name)
+              console.log("🎵 Preview URL:", data.item.preview_url ? "Disponível" : "Não disponível")
+              console.log("🎵 Imagens do álbum:", data.item.album.images?.length || 0)
 
               // Se tem preview_url, usa para análise de batida
               if (data.item.preview_url && meydaLoaded) {
@@ -219,6 +230,12 @@ export default function PhotoBeatBorder() {
             stopPulse()
           } else {
             console.log("🔍 Erro na resposta:", response.status)
+            if (response.status === 401) {
+              console.log("🔍 Token expirado, removendo...")
+              localStorage.removeItem("spotify_token")
+              setSpotifyToken(null)
+              setSpotifyUser(null)
+            }
             setIsSpotifyPlaying(false)
             stopPulse()
           }
@@ -248,8 +265,16 @@ export default function PhotoBeatBorder() {
         const user = await response.json()
         setSpotifyUser(user)
         console.log("✅ Usuário Spotify:", user.display_name)
-        console.log("✅ Foto do usuário:", user.images?.[0]?.url)
+        console.log("✅ ID do usuário:", user.id)
+        console.log("✅ Email:", user.email)
+        console.log("✅ Imagens disponíveis:", user.images?.length || 0)
+        if (user.images?.[0]?.url) {
+          console.log("✅ URL da foto:", user.images[0].url)
+        } else {
+          console.log("⚠️ Usuário não tem foto de perfil")
+        }
       } else {
+        console.error("❌ Erro ao buscar usuário:", response.status)
         // Token expirado
         localStorage.removeItem("spotify_token")
         setSpotifyToken(null)
@@ -596,20 +621,26 @@ export default function PhotoBeatBorder() {
     setIsPlaying(false)
   }
 
-  // Função para determinar qual imagem mostrar
+  // Função para determinar qual imagem mostrar (melhorada)
   const getDisplayImage = () => {
-    if (spotifyUser?.images?.[0]?.url) {
-      console.log("🖼️ Usando foto do Spotify:", spotifyUser.images[0].url)
-      return spotifyUser.images[0].url
-    }
+    // 1. Prioridade: Capa do álbum da música atual (mais relevante)
     if (currentTrack?.album?.images?.[0]?.url) {
       console.log("🖼️ Usando capa do álbum:", currentTrack.album.images[0].url)
       return currentTrack.album.images[0].url
     }
+
+    // 2. Segunda prioridade: Foto do usuário Spotify
+    if (spotifyUser?.images?.[0]?.url) {
+      console.log("🖼️ Usando foto do Spotify:", spotifyUser.images[0].url)
+      return spotifyUser.images[0].url
+    }
+
+    // 3. Última prioridade: Foto enviada pelo usuário
     if (imageUrl) {
       console.log("🖼️ Usando foto enviada:", imageUrl)
       return imageUrl
     }
+
     console.log("🖼️ Nenhuma imagem disponível")
     return null
   }
@@ -637,13 +668,65 @@ export default function PhotoBeatBorder() {
             </div>
           )}
 
-          {/* Debug info */}
-          <div className="text-xs text-gray-400">
-            {spotifyUser?.images?.[0]?.url && <div>✅ Foto Spotify disponível</div>}
-            {currentTrack?.album?.images?.[0]?.url && <div>✅ Capa álbum disponível</div>}
-            {imageUrl && <div>✅ Foto enviada disponível</div>}
-            {isSpotifyPlaying && <div>🎵 Música tocando</div>}
-            {isPlaying && <div>🌊 Pulsação ativa</div>}
+          {/* Seção "Ouvindo agora" */}
+          {currentTrack && (
+            <div className="text-center bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+              <div className="text-green-400 text-sm font-medium mb-1">🎵 OUVINDO AGORA</div>
+              <div className="text-white text-xl font-bold">{currentTrack.name}</div>
+              <div className="text-gray-300 text-sm">
+                {currentTrack.artists.map((artist) => artist.name).join(", ")}
+              </div>
+              <div className="text-gray-400 text-xs mt-1">{currentTrack.album.name}</div>
+
+              {/* Status de reprodução */}
+              <div className="flex items-center justify-center mt-3 gap-4">
+                {isSpotifyPlaying ? (
+                  <div className="flex items-center text-green-400">
+                    <Play className="w-4 h-4 mr-1" />
+                    <span className="text-sm">Tocando</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center text-yellow-400">
+                    <Pause className="w-4 h-4 mr-1" />
+                    <span className="text-sm">Pausado</span>
+                  </div>
+                )}
+
+                {/* Indicador de preview */}
+                {currentTrack.preview_url ? (
+                  <div className="flex items-center text-blue-400">
+                    <Music className="w-4 h-4 mr-1" />
+                    <span className="text-xs">Preview disponível</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center text-orange-400">
+                    <Music className="w-4 h-4 mr-1" />
+                    <span className="text-xs">Simulando batida</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Mensagem quando não está ouvindo nada */}
+          {!currentTrack && spotifyToken && (
+            <div className="text-center bg-gray-800/30 rounded-lg p-4 border border-gray-600">
+              <div className="text-gray-400 text-sm">🔍 Nenhuma música detectada</div>
+              <div className="text-gray-500 text-xs mt-1">Toque uma música no Spotify para sincronizar</div>
+            </div>
+          )}
+
+          {/* Debug info melhorado */}
+          <div className="text-xs text-gray-400 space-y-1">
+            {spotifyToken && <div>✅ Token Spotify ativo</div>}
+            {spotifyUser && <div>✅ Usuário: {spotifyUser.display_name}</div>}
+            {spotifyUser?.images?.[0]?.url && <div>✅ Foto do usuário disponível</div>}
+            {currentTrack && <div>✅ Música detectada: {currentTrack.name}</div>}
+            {currentTrack?.album?.images?.[0]?.url && <div>✅ Capa do álbum disponível</div>}
+            {currentTrack?.preview_url && <div>✅ Preview URL disponível</div>}
+            {imageUrl && <div>✅ Foto local enviada</div>}
+            {isSpotifyPlaying && <div>🎵 Reproduzindo no Spotify</div>}
+            {isPlaying && <div>🌊 Análise de batida ativa</div>}
           </div>
         </div>
 
@@ -673,27 +756,6 @@ export default function PhotoBeatBorder() {
             />
           </div>
         </div>
-
-        {/* Música atual do Spotify */}
-        {currentTrack && (
-          <div className="text-center">
-            <div className="text-white text-lg font-medium">{currentTrack.name}</div>
-            <div className="text-gray-400 text-sm">{currentTrack.artists.map((artist) => artist.name).join(", ")}</div>
-            <div className="flex items-center justify-center mt-2">
-              {isSpotifyPlaying ? (
-                <div className="flex items-center text-green-400">
-                  <Play className="w-4 h-4 mr-1" />
-                  Tocando no Spotify
-                </div>
-              ) : (
-                <div className="flex items-center text-gray-400">
-                  <Pause className="w-4 h-4 mr-1" />
-                  Pausado
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Status geral */}
         <div className="text-center">
