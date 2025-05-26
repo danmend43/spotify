@@ -561,7 +561,6 @@ export default function PhotoBeatBorder() {
             <div>
               <label className="block text-white text-sm font-medium mb-2">Spotify</label>
 
-              {/* Informações de configuração */}
               <div className="mb-4 p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
                 <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify Dashboard:</p>
                 <div className="flex items-center gap-2 mt-1">
@@ -585,8 +584,15 @@ export default function PhotoBeatBorder() {
                   3. Adicione a URL acima em "Redirect URIs"
                   <br />
                   4. Clique Save
-                  <br />
-                  5. Adicione o Client Secret nas variáveis de ambiente
+                </p>
+              </div>
+
+              {/* Status de configuração */}
+              <div className="mt-3 p-3 bg-green-900/20 border border-green-600 rounded">
+                <p className="text-green-400 text-xs">
+                  ✅ Client Secret configurado!
+                  <br />📋 Próximo passo: Faça redeploy no Vercel
+                  <br />🔄 Vercel Dashboard → Deployments → Redeploy
                 </p>
               </div>
 
