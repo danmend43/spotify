@@ -98,6 +98,27 @@ export default function PhotoBeatBorder() {
       setSpotifyToken(savedToken)
       fetchSpotifyUser(savedToken)
     }
+
+    // Verifica se voltou do callback com token
+    const urlParams = new URLSearchParams(window.location.search)
+    const accessToken = urlParams.get("access_token")
+    const error = urlParams.get("error")
+
+    if (error) {
+      console.error("❌ Erro do callback:", error)
+      alert(`Erro do Spotify: ${error}`)
+      // Remove parâmetros da URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
+
+    if (accessToken) {
+      console.log("✅ Token recebido do callback!")
+      localStorage.setItem("spotify_token", accessToken)
+      setSpotifyToken(accessToken)
+      fetchSpotifyUser(accessToken)
+      // Remove parâmetros da URL
+      window.history.replaceState({}, document.title, window.location.pathname)
+    }
   }, [])
 
   // Configura player do Spotify quando tem token
@@ -169,26 +190,6 @@ export default function PhotoBeatBorder() {
       }
     }
   }, [spotifyToken, isSpotifyPlaying, meydaLoaded])
-
-  // Detecta quando volta do callback do Spotify
-  useEffect(() => {
-    // Verifica se acabou de voltar do callback
-    const urlParams = new URLSearchParams(window.location.search)
-    const fromCallback = urlParams.get("from") === "callback"
-
-    if (fromCallback) {
-      // Remove o parâmetro da URL
-      window.history.replaceState({}, document.title, window.location.pathname)
-
-      // Verifica se tem token salvo
-      const token = localStorage.getItem("spotify_token")
-      if (token) {
-        console.log("✅ Token detectado após callback!")
-        setSpotifyToken(token)
-        fetchSpotifyUser(token)
-      }
-    }
-  }, [])
 
   const fetchSpotifyUser = async (token: string) => {
     try {
@@ -303,7 +304,7 @@ export default function PhotoBeatBorder() {
 
   const handleSpotifyLogin = () => {
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
-    const redirectUri = "https://spotify-eight-green.vercel.app/callback"
+    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback"
 
     console.log("🔍 Iniciando login do Spotify...")
     console.log("🔍 Client ID:", clientId)
@@ -327,11 +328,11 @@ export default function PhotoBeatBorder() {
 
     const authUrl = new URL("https://accounts.spotify.com/authorize")
     authUrl.searchParams.append("client_id", clientId)
-    authUrl.searchParams.append("response_type", "token")
+    authUrl.searchParams.append("response_type", "code") // Mudança aqui!
     authUrl.searchParams.append("redirect_uri", redirectUri)
     authUrl.searchParams.append("scope", scopes)
     authUrl.searchParams.append("state", state)
-    authUrl.searchParams.append("show_dialog", "true") // Força mostrar dialog
+    authUrl.searchParams.append("show_dialog", "true")
 
     console.log("🚀 URL de autorização:", authUrl.toString())
 
@@ -565,12 +566,12 @@ export default function PhotoBeatBorder() {
                 <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify Dashboard:</p>
                 <div className="flex items-center gap-2 mt-1">
                   <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
-                    https://spotify-eight-green.vercel.app/callback
+                    https://spotify-eight-green.vercel.app/api/spotify/callback
                   </code>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/callback")}
+                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/api/spotify/callback")}
                     className="h-8 w-8 p-0"
                   >
                     <Copy className="h-3 w-3" />
@@ -584,6 +585,8 @@ export default function PhotoBeatBorder() {
                   3. Adicione a URL acima em "Redirect URIs"
                   <br />
                   4. Clique Save
+                  <br />
+                  5. Adicione o Client Secret nas variáveis de ambiente
                 </p>
               </div>
 
