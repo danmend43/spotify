@@ -241,7 +241,7 @@ export default function PhotoBeatBorder() {
         } catch (error) {
           console.error("❌ Erro ao buscar música atual:", error)
         }
-      }, 1000) // Verifica a cada 1 segundo para melhor sincronização
+      }, 500) // Mudado de 1000 para 500ms para melhor sincronização
 
       return () => {
         if (spotifyIntervalRef.current) {
@@ -256,6 +256,7 @@ export default function PhotoBeatBorder() {
     if (!spotifyToken) return
 
     try {
+      console.log("🔍 Buscando análise de áudio para track:", trackId)
       console.log("🔍 Buscando análise de áudio para:", trackId)
       const response = await fetch(`https://api.spotify.com/v1/audio-analysis/${trackId}`, {
         headers: {
@@ -273,7 +274,13 @@ export default function PhotoBeatBorder() {
 
         // Log das primeiras batidas para debug
         if (analysis.beats?.length > 0) {
-          console.log("🥁 Primeiras 10 batidas:", analysis.beats.slice(0, 10))
+          console.log(
+            "🥁 Primeiras 5 batidas:",
+            analysis.beats.slice(0, 5).map((b) => ({
+              tempo: b.start.toFixed(2) + "s",
+              confiança: b.confidence.toFixed(2),
+            })),
+          )
         }
       } else {
         console.error("❌ Erro ao buscar análise:", response.status)
@@ -295,29 +302,31 @@ export default function PhotoBeatBorder() {
     const progressSeconds = progressMs / 1000
     console.log("🎵 Sincronizando batidas a partir de:", progressSeconds, "segundos")
 
-    // Encontra batidas futuras (próximos 10 segundos)
+    // Encontra batidas futuras (próximos 5 segundos para melhor performance)
     const upcomingBeats = audioAnalysis.beats.filter((beat) => {
       const beatTime = beat.start
-      return beatTime > progressSeconds && beatTime < progressSeconds + 10
+      return beatTime > progressSeconds && beatTime < progressSeconds + 5
     })
 
-    console.log("🥁 Batidas próximas:", upcomingBeats.length)
+    console.log("🥁 Batidas próximas encontradas:", upcomingBeats.length)
 
-    // Agenda as batidas
+    // Agenda as batidas com melhor precisão
     upcomingBeats.forEach((beat, index) => {
       const delay = (beat.start - progressSeconds) * 1000
-      if (delay > 0 && delay < 10000) {
-        // Só agenda se for nos próximos 10 segundos
+
+      // Só agenda se for nos próximos 5 segundos e delay positivo
+      if (delay > 0 && delay < 5000) {
         const timeout = setTimeout(() => {
+          console.log(`🥁 BATIDA! Tempo: ${beat.start}s, Confiança: ${beat.confidence.toFixed(2)}`)
           pulseOnBeat(beat.confidence)
         }, delay)
 
         beatTimeoutsRef.current.push(timeout)
 
-        // Log apenas das primeiras 5 batidas para não poluir
-        if (index < 5) {
+        // Log das primeiras batidas para debug
+        if (index < 3) {
           console.log(
-            `🥁 Batida ${index + 1} agendada para +${delay.toFixed(0)}ms (confiança: ${beat.confidence.toFixed(2)})`,
+            `🥁 Batida ${index + 1}: tempo=${beat.start.toFixed(2)}s, delay=+${delay.toFixed(0)}ms, confiança=${beat.confidence.toFixed(2)}`,
           )
         }
       }
@@ -342,53 +351,56 @@ export default function PhotoBeatBorder() {
   const pulseOnBeat = (confidence: number) => {
     if (!borderRef.current) return
 
-    // Intensidade baseada na confiança da batida (0-1)
-    const intensity = Math.max(confidence * 30, 10) // Mínimo 10, máximo 30
-    const glowSize = intensity * 2
-    const opacity = 0.6 + confidence * 0.4
+    console.log(`🔥 PULSE! Confiança: ${confidence.toFixed(2)}`)
 
-    // Cor baseada na intensidade
+    // Intensidade baseada na confiança da batida (0-1)
+    const baseIntensity = Math.max(confidence * 40, 15) // Aumentado: mínimo 15, máximo 40
+    const glowSize = baseIntensity * 3 // Aumentado multiplicador
+    const opacity = 0.8 + confidence * 0.2 // Aumentado opacidade base
+
+    // Cores mais vibrantes baseadas na intensidade
     let red, green, blue
     if (confidence > 0.8) {
-      // Batida muito forte - amarelo/branco
+      // Batida muito forte - branco/amarelo brilhante
       red = 255
       green = 255
-      blue = 100
+      blue = 200
     } else if (confidence > 0.6) {
-      // Batida forte - laranja
+      // Batida forte - laranja vibrante
       red = 255
-      green = 150
+      green = 100
       blue = 0
     } else if (confidence > 0.4) {
-      // Batida média - vermelho
+      // Batida média - vermelho brilhante
       red = 255
-      green = 50
-      blue = 50
+      green = 0
+      blue = 100
     } else {
-      // Batida fraca - vermelho escuro
-      red = 200
+      // Batida fraca - vermelho
+      red = 255
       green = 50
       blue = 50
     }
 
-    // Aplica o efeito
+    // Aplica o efeito com múltiplas camadas
     borderRef.current.style.boxShadow = `
-      0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
-      0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.5}),
-      0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.3})
-    `
+    0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
+    0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.7}),
+    0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.4}),
+    0 0 ${glowSize * 4}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.2})
+  `
     borderRef.current.style.borderColor = `rgba(${red}, ${green}, ${blue}, ${opacity})`
+    borderRef.current.style.borderWidth = `${4 + confidence * 4}px` // Borda mais grossa na batida
 
     // Volta ao normal após um tempo baseado na confiança
-    const duration = 100 + confidence * 200 // 100-300ms
+    const duration = 150 + confidence * 250 // 150-400ms (aumentado)
     setTimeout(() => {
       if (borderRef.current) {
         borderRef.current.style.boxShadow = "none"
         borderRef.current.style.borderColor = "rgb(239, 68, 68)"
+        borderRef.current.style.borderWidth = "4px"
       }
     }, duration)
-
-    console.log(`🥁 Batida! Confiança: ${confidence.toFixed(2)}, Intensidade: ${intensity.toFixed(1)}`)
   }
 
   const fetchSpotifyUser = async (token: string) => {
