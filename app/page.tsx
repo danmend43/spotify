@@ -49,6 +49,7 @@ export default function PhotoBeatBorder() {
   const meydaAnalyzerRef = useRef<any>(null)
   const borderRef = useRef<HTMLDivElement | null>(null)
   const spotifyIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pulseIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   // Carrega Meyda quando o componente monta
   const loadMeyda = () => {
@@ -170,21 +171,29 @@ export default function PhotoBeatBorder() {
   // Monitora música atual do Spotify
   useEffect(() => {
     if (spotifyToken) {
+      console.log("🔍 Iniciando monitoramento do Spotify...")
+
       // Inicia monitoramento da música atual
       spotifyIntervalRef.current = setInterval(async () => {
         try {
+          console.log("🔍 Verificando música atual...")
           const response = await fetch("https://api.spotify.com/v1/me/player/currently-playing", {
             headers: {
               Authorization: `Bearer ${spotifyToken}`,
             },
           })
 
+          console.log("🔍 Response status:", response.status)
+
           if (response.ok && response.status !== 204) {
             const data = await response.json()
+            console.log("🔍 Dados recebidos:", data)
+
             if (data && data.item && data.is_playing) {
               setCurrentTrack(data.item)
               setIsSpotifyPlaying(true)
               console.log("🎵 Música tocando:", data.item.name)
+              console.log("🎵 Preview URL:", data.item.preview_url)
 
               // Se tem preview_url, usa para análise de batida
               if (data.item.preview_url && meydaLoaded) {
@@ -196,19 +205,27 @@ export default function PhotoBeatBorder() {
                 simulateBeatPulse()
               }
             } else {
+              console.log("🔍 Nenhuma música tocando ou pausada")
               setIsSpotifyPlaying(false)
-              setCurrentTrack(null)
+              if (!data || !data.item) {
+                setCurrentTrack(null)
+              }
               stopPulse()
             }
-          } else {
+          } else if (response.status === 204) {
+            console.log("🔍 Nenhuma música ativa (204)")
             setIsSpotifyPlaying(false)
             setCurrentTrack(null)
+            stopPulse()
+          } else {
+            console.log("🔍 Erro na resposta:", response.status)
+            setIsSpotifyPlaying(false)
             stopPulse()
           }
         } catch (error) {
           console.error("❌ Erro ao buscar música atual:", error)
         }
-      }, 1000) // Atualiza a cada segundo
+      }, 2000) // Atualiza a cada 2 segundos
 
       return () => {
         if (spotifyIntervalRef.current) {
@@ -220,6 +237,7 @@ export default function PhotoBeatBorder() {
 
   const fetchSpotifyUser = async (token: string) => {
     try {
+      console.log("🔍 Buscando dados do usuário...")
       const response = await fetch("https://api.spotify.com/v1/me", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -230,6 +248,7 @@ export default function PhotoBeatBorder() {
         const user = await response.json()
         setSpotifyUser(user)
         console.log("✅ Usuário Spotify:", user.display_name)
+        console.log("✅ Foto do usuário:", user.images?.[0]?.url)
       } else {
         // Token expirado
         localStorage.removeItem("spotify_token")
@@ -243,6 +262,8 @@ export default function PhotoBeatBorder() {
   const analyzeSpotifyPreview = async (previewUrl: string) => {
     try {
       // Para análise anterior
+      stopPulse()
+
       if (sourceRef.current) {
         sourceRef.current.disconnect()
         sourceRef.current.stop()
@@ -319,8 +340,11 @@ export default function PhotoBeatBorder() {
       source.start()
 
       setIsPlaying(true)
+      console.log("✅ Análise de preview iniciada")
     } catch (error) {
       console.error("❌ Erro ao analisar preview:", error)
+      // Se falhar, usa simulação
+      simulateBeatPulse()
     }
   }
 
@@ -373,6 +397,7 @@ export default function PhotoBeatBorder() {
     setSpotifyUser(null)
     setCurrentTrack(null)
     setIsSpotifyPlaying(false)
+    stopPulse()
     if (spotifyPlayer) {
       spotifyPlayer.disconnect()
       setSpotifyPlayer(null)
@@ -403,6 +428,8 @@ export default function PhotoBeatBorder() {
 
       try {
         // Para áudio anterior
+        stopPulse()
+
         if (sourceRef.current) {
           sourceRef.current.disconnect()
           sourceRef.current.stop()
@@ -491,7 +518,11 @@ export default function PhotoBeatBorder() {
   const simulateBeatPulse = () => {
     if (!borderRef.current) return
 
+    console.log("🎵 Iniciando simulação de pulsação")
+
     // Para análise anterior
+    stopPulse()
+
     if (sourceRef.current) {
       sourceRef.current.disconnect()
       sourceRef.current.stop()
@@ -501,9 +532,12 @@ export default function PhotoBeatBorder() {
     }
 
     // Simula pulsação a 120 BPM (batida a cada 500ms)
-    const pulseInterval = setInterval(() => {
+    pulseIntervalRef.current = setInterval(() => {
       if (!borderRef.current || !isSpotifyPlaying) {
-        clearInterval(pulseInterval)
+        console.log("🔍 Parando pulsação - sem borda ou não tocando")
+        if (pulseIntervalRef.current) {
+          clearInterval(pulseIntervalRef.current)
+        }
         return
       }
 
@@ -544,15 +578,43 @@ export default function PhotoBeatBorder() {
     }, 500) // Pulsa a cada 500ms (120 BPM)
 
     setIsPlaying(true)
+    console.log("✅ Simulação de pulsação iniciada")
   }
 
   const stopPulse = () => {
+    console.log("🔍 Parando todas as pulsações")
+
+    if (pulseIntervalRef.current) {
+      clearInterval(pulseIntervalRef.current)
+      pulseIntervalRef.current = null
+    }
+
     if (borderRef.current) {
       borderRef.current.style.boxShadow = "none"
       borderRef.current.style.borderColor = "rgb(239, 68, 68)"
     }
     setIsPlaying(false)
   }
+
+  // Função para determinar qual imagem mostrar
+  const getDisplayImage = () => {
+    if (spotifyUser?.images?.[0]?.url) {
+      console.log("🖼️ Usando foto do Spotify:", spotifyUser.images[0].url)
+      return spotifyUser.images[0].url
+    }
+    if (currentTrack?.album?.images?.[0]?.url) {
+      console.log("🖼️ Usando capa do álbum:", currentTrack.album.images[0].url)
+      return currentTrack.album.images[0].url
+    }
+    if (imageUrl) {
+      console.log("🖼️ Usando foto enviada:", imageUrl)
+      return imageUrl
+    }
+    console.log("🖼️ Nenhuma imagem disponível")
+    return null
+  }
+
+  const displayImage = getDisplayImage()
 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -574,6 +636,15 @@ export default function PhotoBeatBorder() {
               Logado no Spotify: {spotifyUser.display_name}
             </div>
           )}
+
+          {/* Debug info */}
+          <div className="text-xs text-gray-400">
+            {spotifyUser?.images?.[0]?.url && <div>✅ Foto Spotify disponível</div>}
+            {currentTrack?.album?.images?.[0]?.url && <div>✅ Capa álbum disponível</div>}
+            {imageUrl && <div>✅ Foto enviada disponível</div>}
+            {isSpotifyPlaying && <div>🎵 Música tocando</div>}
+            {isPlaying && <div>🌊 Pulsação ativa</div>}
+          </div>
         </div>
 
         {/* Foto com borda de onda */}
@@ -583,20 +654,12 @@ export default function PhotoBeatBorder() {
             <div
               className="w-64 h-64 rounded-full bg-gray-700 flex items-center justify-center overflow-hidden"
               style={{
-                backgroundImage: spotifyUser?.images[0]?.url
-                  ? `url(${spotifyUser.images[0].url})`
-                  : currentTrack?.album.images[0]?.url
-                    ? `url(${currentTrack.album.images[0].url})`
-                    : imageUrl
-                      ? `url(${imageUrl})`
-                      : "none",
+                backgroundImage: displayImage ? `url(${displayImage})` : "none",
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }}
             >
-              {!spotifyUser?.images[0]?.url && !currentTrack?.album.images[0]?.url && !imageUrl && (
-                <ImageIcon className="w-16 h-16 text-gray-400" />
-              )}
+              {!displayImage && <ImageIcon className="w-16 h-16 text-gray-400" />}
             </div>
 
             {/* Borda com efeito de onda */}
@@ -677,15 +740,6 @@ export default function PhotoBeatBorder() {
                   3. Adicione a URL acima em "Redirect URIs"
                   <br />
                   4. Clique Save
-                </p>
-              </div>
-
-              {/* Status de configuração */}
-              <div className="mt-3 p-3 bg-green-900/20 border border-green-600 rounded">
-                <p className="text-green-400 text-xs">
-                  ✅ Client Secret configurado!
-                  <br />📋 Próximo passo: Faça redeploy no Vercel
-                  <br />🔄 Vercel Dashboard → Deployments → Redeploy
                 </p>
               </div>
 
