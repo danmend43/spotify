@@ -103,10 +103,23 @@ export default function PhotoBeatBorder() {
     const urlParams = new URLSearchParams(window.location.search)
     const accessToken = urlParams.get("access_token")
     const error = urlParams.get("error")
+    const details = urlParams.get("details")
 
     if (error) {
       console.error("❌ Erro do callback:", error)
-      alert(`Erro do Spotify: ${error}`)
+      let errorMessage = `Erro do Spotify: ${error}`
+
+      if (details) {
+        try {
+          const errorDetails = JSON.parse(decodeURIComponent(details))
+          console.error("❌ Detalhes do erro:", errorDetails)
+          errorMessage += `\n\nDetalhes: ${JSON.stringify(errorDetails, null, 2)}`
+        } catch (e) {
+          errorMessage += `\n\nDetalhes: ${details}`
+        }
+      }
+
+      alert(errorMessage)
       // Remove parâmetros da URL
       window.history.replaceState({}, document.title, window.location.pathname)
     }
@@ -156,7 +169,7 @@ export default function PhotoBeatBorder() {
 
   // Monitora música atual do Spotify
   useEffect(() => {
-    if (spotifyToken && isSpotifyPlaying) {
+    if (spotifyToken) {
       // Inicia monitoramento da música atual
       spotifyIntervalRef.current = setInterval(async () => {
         try {
@@ -166,17 +179,31 @@ export default function PhotoBeatBorder() {
             },
           })
 
-          if (response.ok) {
+          if (response.ok && response.status !== 204) {
             const data = await response.json()
-            if (data && data.item) {
+            if (data && data.item && data.is_playing) {
               setCurrentTrack(data.item)
-              setIsSpotifyPlaying(data.is_playing)
+              setIsSpotifyPlaying(true)
+              console.log("🎵 Música tocando:", data.item.name)
 
-              // Se tem preview_url, usa para análise
+              // Se tem preview_url, usa para análise de batida
               if (data.item.preview_url && meydaLoaded) {
+                console.log("🎵 Analisando preview:", data.item.preview_url)
                 await analyzeSpotifyPreview(data.item.preview_url)
+              } else {
+                // Se não tem preview, simula pulsação baseada no tempo
+                console.log("🎵 Sem preview, simulando pulsação")
+                simulateBeatPulse()
               }
+            } else {
+              setIsSpotifyPlaying(false)
+              setCurrentTrack(null)
+              stopPulse()
             }
+          } else {
+            setIsSpotifyPlaying(false)
+            setCurrentTrack(null)
+            stopPulse()
           }
         } catch (error) {
           console.error("❌ Erro ao buscar música atual:", error)
@@ -189,7 +216,7 @@ export default function PhotoBeatBorder() {
         }
       }
     }
-  }, [spotifyToken, isSpotifyPlaying, meydaLoaded])
+  }, [spotifyToken, meydaLoaded])
 
   const fetchSpotifyUser = async (token: string) => {
     try {
@@ -461,6 +488,72 @@ export default function PhotoBeatBorder() {
     [meydaLoaded],
   )
 
+  const simulateBeatPulse = () => {
+    if (!borderRef.current) return
+
+    // Para análise anterior
+    if (sourceRef.current) {
+      sourceRef.current.disconnect()
+      sourceRef.current.stop()
+    }
+    if (meydaAnalyzerRef.current) {
+      meydaAnalyzerRef.current.stop()
+    }
+
+    // Simula pulsação a 120 BPM (batida a cada 500ms)
+    const pulseInterval = setInterval(() => {
+      if (!borderRef.current || !isSpotifyPlaying) {
+        clearInterval(pulseInterval)
+        return
+      }
+
+      // Cria efeito de pulsação
+      const intensity = 10 + Math.random() * 15 // Varia entre 10-25
+      const glowSize = intensity * 2
+      const opacity = 0.7 + intensity * 0.02
+
+      let red, green, blue
+      if (intensity > 20) {
+        red = 255
+        green = 255
+        blue = 100
+      } else if (intensity > 15) {
+        red = 255
+        green = 150
+        blue = 0
+      } else {
+        red = 255
+        green = 50
+        blue = 50
+      }
+
+      borderRef.current.style.boxShadow = `
+        0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
+        0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.5}),
+        0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.3})
+      `
+      borderRef.current.style.borderColor = `rgba(${red}, ${green}, ${blue}, ${opacity})`
+
+      // Volta ao normal após 200ms
+      setTimeout(() => {
+        if (borderRef.current) {
+          borderRef.current.style.boxShadow = "none"
+          borderRef.current.style.borderColor = "rgb(239, 68, 68)"
+        }
+      }, 200)
+    }, 500) // Pulsa a cada 500ms (120 BPM)
+
+    setIsPlaying(true)
+  }
+
+  const stopPulse = () => {
+    if (borderRef.current) {
+      borderRef.current.style.boxShadow = "none"
+      borderRef.current.style.borderColor = "rgb(239, 68, 68)"
+    }
+    setIsPlaying(false)
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-lg space-y-8">
@@ -492,16 +585,16 @@ export default function PhotoBeatBorder() {
               style={{
                 backgroundImage: spotifyUser?.images[0]?.url
                   ? `url(${spotifyUser.images[0].url})`
-                  : imageUrl
-                    ? `url(${imageUrl})`
-                    : currentTrack?.album.images[0]?.url
-                      ? `url(${currentTrack.album.images[0].url})`
+                  : currentTrack?.album.images[0]?.url
+                    ? `url(${currentTrack.album.images[0].url})`
+                    : imageUrl
+                      ? `url(${imageUrl})`
                       : "none",
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }}
             >
-              {!spotifyUser?.images[0]?.url && !imageUrl && !currentTrack && (
+              {!spotifyUser?.images[0]?.url && !currentTrack?.album.images[0]?.url && !imageUrl && (
                 <ImageIcon className="w-16 h-16 text-gray-400" />
               )}
             </div>
