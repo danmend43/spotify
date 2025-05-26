@@ -531,7 +531,7 @@ export default function PhotoBeatBorder() {
 
               {/* Informações de configuração */}
               <div className="mb-4 p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
-                <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify :D Dashboard:</p>
+                <p className="text-blue-400 text-sm mb-2">🔗 Configure no Spotify :D - Dashboard:</p>
                 <div className="flex items-center gap-2 mt-1">
                   <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
                     https://spotify-eight-green.vercel.app/callback
