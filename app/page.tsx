@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Upload, ImageIcon, Music, LogIn, LogOut, Play, Pause, Copy } from "lucide-react"
+import { ImageIcon, Music, LogIn, LogOut, Play, Pause } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -600,9 +600,6 @@ export default function AudioBeatDetector() {
     if (spotifyUser?.images?.[0]?.url) {
       return spotifyUser.images[0].url
     }
-    if (imageUrl) {
-      return imageUrl
-    }
     return null
   }
 
@@ -694,16 +691,6 @@ export default function AudioBeatDetector() {
               <div className="text-gray-500 text-xs mt-1">Toque uma música no Spotify para sincronizar</div>
             </div>
           )}
-
-          {/* Debug info */}
-          <div className="text-xs text-gray-400 space-y-1">
-            {spotifyToken && <div>✅ Token Spotify ativo</div>}
-            {spotifyUser && <div>✅ Usuário: {spotifyUser.display_name}</div>}
-            {currentTrack && <div>✅ Música: {currentTrack.name}</div>}
-            {audioAnalysis && <div>✅ Análise: {audioAnalysis.beats?.length || 0} batidas</div>}
-            {isSpotifyPlaying && <div>🎵 Reproduzindo</div>}
-            {isPlaying && <div>🥁 Batidas sincronizadas</div>}
-          </div>
         </div>
 
         {/* Foto com borda de onda */}
@@ -740,34 +727,6 @@ export default function AudioBeatDetector() {
             <div>
               <label className="block text-white text-sm font-medium mb-2">Spotify</label>
 
-              <div className="mb-4 p-4 bg-blue-900/20 border border-blue-600 rounded-lg">
-                <p className="text-blue-400 text-sm mb-2">🔗 Configure EXATAMENTE esta URL no Spotify Dashboard:</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <code className="flex-1 p-2 bg-gray-700 rounded text-white text-xs">
-                    https://spotify-eight-green.vercel.app/api/spotify/callback
-                  </code>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => copyToClipboard("https://spotify-eight-green.vercel.app/api/spotify/callback")}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-                <p className="text-gray-400 text-xs mt-2">
-                  ✅ Agora usando fluxo de código (response_type=code) com backend
-                  <br />
-                  1. Vá em developer.spotify.com/dashboard
-                  <br />
-                  2. Clique no seu app → Edit Settings
-                  <br />
-                  3. Em "Redirect URIs", adicione a URL acima
-                  <br />
-                  4. Clique Save
-                </p>
-              </div>
-
               {!spotifyToken ? (
                 <Button onClick={handleSpotifyLogin} className="w-full bg-green-600 hover:bg-green-700 text-white">
                   <LogIn className="w-4 h-4 mr-2" />
@@ -779,34 +738,6 @@ export default function AudioBeatDetector() {
                   Desconectar Spotify
                 </Button>
               )}
-            </div>
-
-            {/* Separador */}
-            <div className="flex items-center">
-              <div className="flex-1 border-t border-gray-600"></div>
-              <span className="px-3 text-gray-400 text-sm">ou</span>
-              <div className="flex-1 border-t border-gray-600"></div>
-            </div>
-
-            {/* Upload de Imagem */}
-            <div>
-              <label className="block text-white text-sm font-medium mb-2">Foto</label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  id="image-upload"
-                />
-                <label
-                  htmlFor="image-upload"
-                  className="flex items-center justify-center p-4 border-2 border-dashed border-gray-600 rounded-lg hover:border-gray-500 transition-colors cursor-pointer"
-                >
-                  <Upload className="w-5 h-5 text-gray-400 mr-2" />
-                  <span className="text-gray-400 text-sm">{imageFile ? imageFile.name : "Enviar foto"}</span>
-                </label>
-              </div>
             </div>
 
             {/* Upload de Áudio */}
@@ -839,9 +770,6 @@ export default function AudioBeatDetector() {
                   </span>
                 </label>
               </div>
-              <p className="text-gray-400 text-xs mt-2">
-                Formatos suportados: MP3, WAV, OGG, M4A. A borda pulsará com a batida da música!
-              </p>
             </div>
           </CardContent>
         </Card>

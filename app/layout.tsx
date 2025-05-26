@@ -3,9 +3,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Audio Beat Detector",
-  description: "Detecta batidas de música e sincroniza com efeitos visuais",
-  generator: "v0.dev",
+  title: "audio spoti"
 }
 
 export default function RootLayout({
