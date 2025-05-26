@@ -50,6 +50,8 @@ export default function PhotoBeatBorder() {
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [meydaLoaded, setMeydaLoaded] = useState(false)
+  const [microphoneActive, setMicrophoneActive] = useState(false)
+  const micStreamRef = useRef<MediaStream | null>(null)
 
   // Spotify states
   const [spotifyToken, setSpotifyToken] = useState<string | null>(null)
@@ -67,6 +69,12 @@ export default function PhotoBeatBorder() {
   const spotifyIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const pulseIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const beatTimeoutsRef = useRef<NodeJS.Timeout[]>([])
+
+  // Função para limpar todos os timeouts de batida
+  const stopAllBeats = () => {
+    beatTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout))
+    beatTimeoutsRef.current = []
+  }
 
   // Carrega Meyda quando o componente monta
   const loadMeyda = () => {
@@ -216,33 +224,28 @@ export default function PhotoBeatBorder() {
               if (!currentTrack || currentTrack.id !== data.item.id) {
                 console.log("🎵 Nova música detectada:", data.item.name)
                 setCurrentTrack(data.item)
-                // Busca análise de áudio para a nova música
-                await fetchAudioAnalysis(data.item.id)
+
+                // Inicia análise por microfone em vez de buscar API
+                if (!microphoneActive) {
+                  await startMicrophoneAnalysis()
+                }
               }
 
               setIsSpotifyPlaying(true)
-              const newProgress = data.progress_ms || 0
-              setCurrentProgress(newProgress)
-
-              // Ressincroniza batidas a cada 2 segundos ou se houve mudança significativa
-              const progressDiff = Math.abs(newProgress - currentProgress)
-              if (audioAnalysis && (progressDiff > 2000 || beatTimeoutsRef.current.length === 0)) {
-                console.log("🔄 Ressincronizando batidas...")
-                syncBeatsWithProgress(newProgress)
-              }
+              setCurrentProgress(data.progress_ms || 0)
             } else {
               setIsSpotifyPlaying(false)
-              stopAllBeats()
+              stopMicrophoneAnalysis()
             }
           } else if (response.status === 204) {
             setIsSpotifyPlaying(false)
             setCurrentTrack(null)
-            stopAllBeats()
+            stopMicrophoneAnalysis()
           }
         } catch (error) {
           console.error("❌ Erro ao buscar música atual:", error)
         }
-      }, 250) // Mudado para 250ms para melhor precisão
+      }, 1000) // Reduzido para 1 segundo
 
       return () => {
         if (spotifyIntervalRef.current) {
@@ -250,147 +253,90 @@ export default function PhotoBeatBorder() {
         }
       }
     }
-  }, [spotifyToken, currentTrack, audioAnalysis, currentProgress])
+  }, [spotifyToken, currentTrack, microphoneActive, isSpotifyPlaying, meydaLoaded])
 
-  // Busca características de áudio do Spotify (alternativa mais acessível)
-  const fetchAudioAnalysis = async (trackId: string) => {
-    if (!spotifyToken) return
+  const startMicrophoneAnalysis = async () => {
+    if (!meydaLoaded) {
+      console.log("❌ Meyda não carregado ainda")
+      return
+    }
 
     try {
-      console.log("🔍 Buscando características de áudio para:", trackId)
+      console.log("🎤 Iniciando análise por microfone...")
 
-      // Tenta primeiro a análise completa
-      let response = await fetch(`https://api.spotify.com/v1/audio-analysis/${trackId}`, {
-        headers: {
-          Authorization: `Bearer ${spotifyToken}`,
+      // Para análise anterior
+      stopAllBeats()
+
+      // Solicita acesso ao microfone
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
         },
       })
 
-      if (response.ok) {
-        const analysis = await response.json()
-        setAudioAnalysis(analysis)
-        console.log("✅ Análise completa recebida!")
-        console.log("🥁 Batidas encontradas:", analysis.beats?.length || 0)
-        return
+      micStreamRef.current = stream
+
+      // Setup Audio Context para microfone
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext()
       }
 
-      // Se falhar, usa audio-features para estimar batidas
-      console.log("⚠️ Análise completa falhou, usando audio-features...")
-      response = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
-        headers: {
-          Authorization: `Bearer ${spotifyToken}`,
+      const source = audioContextRef.current.createMediaStreamSource(stream)
+
+      // Configura Meyda para detectar batidas em tempo real
+      const meydaAnalyzer = window.Meyda.createMeydaAnalyzer({
+        audioContext: audioContextRef.current,
+        source: source,
+        bufferSize: 1024,
+        featureExtractors: ["rms", "spectralCentroid", "energy"],
+        callback: (features: any) => {
+          if (features && borderRef.current && isSpotifyPlaying) {
+            // Detecta picos de energia para simular batidas
+            const energy = features.energy || 0
+            const rms = features.rms || 0
+            const spectralCentroid = features.spectralCentroid || 0
+
+            // Algoritmo simples de detecção de batida
+            const intensity = (energy * 2 + rms * 10) / 3
+            const isBeat = intensity > 0.15 && spectralCentroid > 1000
+
+            if (isBeat) {
+              console.log(`🥁 BATIDA DETECTADA! Energia: ${energy.toFixed(3)}, RMS: ${rms.toFixed(3)}`)
+              pulseOnBeat(Math.min(intensity * 2, 1))
+            }
+          }
         },
       })
 
-      if (response.ok) {
-        const features = await response.json()
-        console.log("✅ Audio features recebidas!")
-        console.log("🎵 Tempo:", features.tempo, "BPM")
-        console.log("🎵 Energia:", features.energy)
-        console.log("🎵 Dançabilidade:", features.danceability)
+      meydaAnalyzerRef.current = meydaAnalyzer
+      meydaAnalyzer.start()
+      setMicrophoneActive(true)
+      setIsPlaying(true)
 
-        // Cria batidas estimadas baseadas no tempo
-        const estimatedBeats = generateBeatsFromTempo(features.tempo, currentTrack?.duration_ms || 180000)
-
-        setAudioAnalysis({
-          beats: estimatedBeats,
-          sections: [],
-          segments: [],
-          tatums: [],
-          bars: [],
-        })
-
-        console.log("🥁 Batidas estimadas:", estimatedBeats.length)
-      } else {
-        console.error("❌ Erro ao buscar características:", response.status)
-        setAudioAnalysis(null)
-      }
+      console.log("✅ Análise por microfone ativa!")
     } catch (error) {
-      console.error("❌ Erro na análise de áudio:", error)
-      setAudioAnalysis(null)
+      console.error("❌ Erro ao acessar microfone:", error)
+      alert("Erro ao acessar microfone. Verifique as permissões.")
     }
   }
 
-  // Gera batidas estimadas baseadas no tempo (BPM)
-  const generateBeatsFromTempo = (tempo: number, durationMs: number) => {
-    const beats = []
-    const beatInterval = 60 / tempo // segundos entre batidas
-    const durationSeconds = durationMs / 1000
-
-    for (let time = 0; time < durationSeconds; time += beatInterval) {
-      beats.push({
-        start: time,
-        duration: beatInterval,
-        confidence: 0.7 + Math.random() * 0.3, // Confiança simulada entre 0.7-1.0
-      })
+  const stopMicrophoneAnalysis = () => {
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop())
+      micStreamRef.current = null
     }
 
-    return beats
-  }
+    if (meydaAnalyzerRef.current) {
+      meydaAnalyzerRef.current.stop()
+    }
 
-  // Sincroniza batidas com o progresso atual da música
-  const syncBeatsWithProgress = (progressMs: number) => {
-    if (!audioAnalysis?.beats || !isSpotifyPlaying) return
-
-    // Limpa timeouts anteriores
+    setMicrophoneActive(false)
+    setIsPlaying(false)
     stopAllBeats()
 
-    const progressSeconds = progressMs / 1000
-    const currentTime = Date.now()
-
-    console.log("🎵 Sincronizando batidas a partir de:", progressSeconds, "segundos")
-
-    // Encontra batidas futuras (próximos 10 segundos)
-    const upcomingBeats = audioAnalysis.beats.filter((beat) => {
-      const beatTime = beat.start
-      return beatTime > progressSeconds && beatTime < progressSeconds + 10
-    })
-
-    console.log("🥁 Batidas próximas encontradas:", upcomingBeats.length)
-
-    // Agenda as batidas com compensação de latência
-    upcomingBeats.forEach((beat, index) => {
-      const beatTimeMs = beat.start * 1000
-      const delay = beatTimeMs - progressMs
-
-      // Compensação de latência (ajuste baseado na performance)
-      const latencyCompensation = 50 // ms
-      const adjustedDelay = Math.max(0, delay - latencyCompensation)
-
-      // Só agenda se for nos próximos 10 segundos e delay positivo
-      if (adjustedDelay >= 0 && adjustedDelay < 10000) {
-        const timeout = setTimeout(() => {
-          // Verifica se ainda está tocando antes de pulsar
-          if (isSpotifyPlaying) {
-            console.log(`🥁 BATIDA! Tempo: ${beat.start}s, Confiança: ${beat.confidence.toFixed(2)}`)
-            pulseOnBeat(beat.confidence)
-          }
-        }, adjustedDelay)
-
-        beatTimeoutsRef.current.push(timeout)
-
-        // Log das primeiras batidas para debug
-        if (index < 5) {
-          console.log(
-            `🥁 Batida ${index + 1}: tempo=${beat.start.toFixed(2)}s, delay=${adjustedDelay.toFixed(0)}ms, confiança=${beat.confidence.toFixed(2)}`,
-          )
-        }
-      }
-    })
-
-    setIsPlaying(upcomingBeats.length > 0)
-  }
-
-  // Para todas as batidas agendadas
-  const stopAllBeats = () => {
-    beatTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout))
-    beatTimeoutsRef.current = []
-    setIsPlaying(false)
-
-    if (borderRef.current) {
-      borderRef.current.style.boxShadow = "none"
-      borderRef.current.style.borderColor = "rgb(239, 68, 68)"
-    }
+    console.log("🔇 Análise por microfone parada")
   }
 
   // Cria efeito visual na batida
@@ -727,9 +673,9 @@ export default function PhotoBeatBorder() {
             {spotifyToken && <div>✅ Token Spotify ativo</div>}
             {spotifyUser && <div>✅ Usuário: {spotifyUser.display_name}</div>}
             {currentTrack && <div>✅ Música: {currentTrack.name}</div>}
-            {audioAnalysis && <div>✅ Análise: {audioAnalysis.beats?.length || 0} batidas</div>}
+            {microphoneActive && <div>🎤 Microfone ativo</div>}
             {isSpotifyPlaying && <div>🎵 Reproduzindo</div>}
-            {isPlaying && <div>🥁 Batidas sincronizadas</div>}
+            {isPlaying && <div>🥁 Detectando batidas</div>}
           </div>
         </div>
 
@@ -779,6 +725,33 @@ export default function PhotoBeatBorder() {
                 </Button>
               )}
             </div>
+
+            {/* Controle manual do microfone */}
+            {spotifyToken && (
+              <div>
+                <label className="block text-white text-sm font-medium mb-2">Detecção de Batidas</label>
+                {!microphoneActive ? (
+                  <Button
+                    onClick={startMicrophoneAnalysis}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    disabled={!meydaLoaded}
+                  >
+                    <Music className="w-4 h-4 mr-2" />
+                    Ativar Microfone para Detectar Batidas
+                  </Button>
+                ) : (
+                  <Button onClick={stopMicrophoneAnalysis} variant="outline" className="w-full">
+                    <Pause className="w-4 h-4 mr-2" />
+                    Parar Detecção de Batidas
+                  </Button>
+                )}
+                <p className="text-gray-400 text-xs mt-2">
+                  {microphoneActive
+                    ? "🎤 Microfone ativo - detectando batidas em tempo real!"
+                    : "Use o microfone para detectar batidas da música tocando no Spotify"}
+                </p>
+              </div>
+            )}
 
             {/* Upload de Áudio */}
             <div>
