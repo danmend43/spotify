@@ -69,6 +69,7 @@ export default function PhotoBeatBorder() {
   const spotifyIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const pulseIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const beatTimeoutsRef = useRef<NodeJS.Timeout[]>([])
+  const currentTrackIdRef = useRef<string | null>(null)
 
   // Função para limpar todos os timeouts de batida
   const stopAllBeats = () => {
@@ -221,20 +222,31 @@ export default function PhotoBeatBorder() {
           const data = await response.json()
 
           if (data && data.item && data.is_playing) {
-            // Verifica se é uma música nova
-            if (!currentTrack || currentTrack.id !== data.item.id) {
+            const trackId = data.item.id
+
+            // Só processa se for uma música realmente nova
+            if (currentTrackIdRef.current !== trackId) {
               console.log("🎵 Nova música detectada:", data.item.name)
+              currentTrackIdRef.current = trackId
               setCurrentTrack(data.item)
+
+              // Para análise anterior antes de iniciar nova
+              if (microphoneActive) {
+                console.log("🔄 Parando análise anterior...")
+                stopMicrophoneAnalysis()
+              }
+
+              // Aguarda um pouco antes de iniciar nova análise
+              setTimeout(async () => {
+                if (meydaLoaded && !microphoneActive) {
+                  console.log("🎤 Iniciando análise para nova música...")
+                  await startMicrophoneAnalysis()
+                }
+              }, 500)
             }
 
             setIsSpotifyPlaying(true)
             setCurrentProgress(data.progress_ms || 0)
-
-            // Inicia microfone apenas se não estiver ativo e Meyda estiver carregado
-            if (!microphoneActive && meydaLoaded) {
-              console.log("🎤 Iniciando análise automática...")
-              await startMicrophoneAnalysis()
-            }
           } else {
             setIsSpotifyPlaying(false)
             if (microphoneActive) {
@@ -244,6 +256,7 @@ export default function PhotoBeatBorder() {
           }
         } else if (response.status === 204) {
           setIsSpotifyPlaying(false)
+          currentTrackIdRef.current = null
           setCurrentTrack(null)
           if (microphoneActive) {
             console.log("🔇 Parando análise - nenhuma música")
@@ -258,15 +271,15 @@ export default function PhotoBeatBorder() {
     // Executa imediatamente
     monitorSpotify()
 
-    // Depois executa a cada 2 segundos
-    spotifyIntervalRef.current = setInterval(monitorSpotify, 2000)
+    // Depois executa a cada 3 segundos (aumentado para reduzir chamadas)
+    spotifyIntervalRef.current = setInterval(monitorSpotify, 3000)
 
     return () => {
       if (spotifyIntervalRef.current) {
         clearInterval(spotifyIntervalRef.current)
       }
     }
-  }, [spotifyToken, meydaLoaded]) // Removido dependências que causavam loop
+  }, [spotifyToken, meydaLoaded])
 
   const startMicrophoneAnalysis = async () => {
     if (!meydaLoaded || microphoneActive) {
