@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Audio Spoti - Detector de Batidas",
+  title: "audio spoti",
   description: "Detecta batidas de música e sincroniza com efeitos visuais",
   generator: "v0.dev",
 }

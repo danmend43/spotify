@@ -23,9 +23,7 @@ export async function GET(request: NextRequest) {
     // Troca o código por um token
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
     const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
-
-    // Usa a URL atual como base para o redirect URI
-    const redirectUri = `${request.nextUrl.origin}/api/spotify/callback`
+    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback"
 
     console.log("🔍 Iniciando troca de código por token...")
     console.log("🔍 Client ID:", clientId)
