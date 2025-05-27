@@ -251,12 +251,12 @@ export default function AudioBeatDetector() {
     }
   }, [spotifyToken, currentTrack, simulatedBeats])
 
-  // Busca características de áudio do Spotify e simula batidas
+  // Busca BPM da música e inicia pulsação simples
   const fetchAudioFeatures = async (trackId: string) => {
     if (!spotifyToken) return
 
     try {
-      console.log("🔍 Buscando características de áudio para:", trackId)
+      console.log("🔍 Buscando BPM para:", trackId)
 
       const response = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
         headers: {
@@ -267,176 +267,73 @@ export default function AudioBeatDetector() {
       if (response.ok) {
         const features = await response.json()
         setAudioFeatures(features)
-        console.log("✅ Audio features recebidas!")
-        console.log("🎵 Características:", {
-          tempo: features.tempo,
-          energy: features.energy,
-          danceability: features.danceability,
-          valence: features.valence,
-          loudness: features.loudness,
-        })
+        console.log("✅ BPM recebido:", features.tempo)
 
-        // Simula batidas baseadas nas características
-        const beats = simulateBeatsFromFeatures(features, currentTrack?.duration_ms || 180000)
-        setSimulatedBeats(beats)
-        console.log("🥁 Batidas simuladas:", beats.length)
+        // Inicia pulsação baseada no BPM
+        startBPMPulse(features.tempo)
       } else {
-        console.error("❌ Erro ao buscar características:", response.status)
-        setAudioFeatures(null)
-        setSimulatedBeats([])
+        console.error("❌ Erro ao buscar BPM:", response.status)
+        // Fallback: usa BPM padrão
+        const defaultBPM = 120
+        console.log("🔄 Usando BPM padrão:", defaultBPM)
+        startBPMPulse(defaultBPM)
       }
     } catch (error) {
-      console.error("❌ Erro na busca de características:", error)
-      setAudioFeatures(null)
-      setSimulatedBeats([])
+      console.error("❌ Erro na busca de BPM:", error)
+      // Fallback: usa BPM padrão
+      const defaultBPM = 120
+      console.log("🔄 Usando BPM padrão:", defaultBPM)
+      startBPMPulse(defaultBPM)
     }
   }
 
-  // Simula batidas baseadas nas características de áudio
-  const simulateBeatsFromFeatures = (features: SpotifyAudioFeatures, durationMs: number): SimulatedBeat[] => {
-    const beats: SimulatedBeat[] = []
-    const durationSeconds = durationMs / 1000
-    const baseBeatInterval = 60 / features.tempo // Intervalo base entre batidas (segundos)
+  // Inicia pulsação simples baseada no BPM
+  const startBPMPulse = (bpm: number) => {
+    stopAllBeats() // Para qualquer pulsação anterior
 
-    console.log("🎵 Simulando batidas com:", {
-      tempo: features.tempo,
-      energy: features.energy,
-      danceability: features.danceability,
-      valence: features.valence,
-    })
+    // Calcula intervalo entre batidas em ms
+    const interval = 60000 / bpm
+    console.log(`🥁 Iniciando pulsação: ${bpm} BPM (${interval.toFixed(0)}ms por batida)`)
 
-    // Fatores de variação baseados nas características
-    const energyFactor = features.energy // 0.0 - 1.0
-    const danceabilityFactor = features.danceability // 0.0 - 1.0
-    const valenceFactor = features.valence // 0.0 - 1.0
+    // Função de pulso simples
+    const pulse = () => {
+      if (!borderRef.current || !isSpotifyPlaying) return
 
-    // Determina padrões de batida baseados no gênero/características
-    const isHighEnergy = energyFactor > 0.7
-    const isDanceable = danceabilityFactor > 0.6
-    const isPositive = valenceFactor > 0.5
+      console.log("🔥 PULSE!")
 
-    let currentTime = 0
-    let beatCount = 0
+      // Aplica efeito visual
+      borderRef.current.style.boxShadow = "0 0 30px 15px #1DB954"
+      borderRef.current.style.borderColor = "#1DB954"
+      borderRef.current.style.borderWidth = "6px"
 
-    while (currentTime < durationSeconds) {
-      const beatInMeasure = beatCount % 4 // Posição na medida (0, 1, 2, 3)
-
-      // Determina o tipo de batida baseado na posição e características
-      let beatType: "kick" | "snare" | "hihat" | "accent" = "kick"
-      let intensity = 0.5
-      let confidence = 0.7
-
-      if (beatInMeasure === 0) {
-        // Primeiro tempo - sempre kick forte
-        beatType = "kick"
-        intensity = 0.8 + energyFactor * 0.2
-        confidence = 0.9
-      } else if (beatInMeasure === 2) {
-        // Terceiro tempo - snare ou kick dependendo do estilo
-        beatType = isDanceable ? "snare" : "kick"
-        intensity = 0.6 + energyFactor * 0.3
-        confidence = 0.8
-      } else {
-        // Tempos fracos
-        if (isHighEnergy && Math.random() < danceabilityFactor) {
-          beatType = "hihat"
-          intensity = 0.3 + energyFactor * 0.4
-          confidence = 0.6 + danceabilityFactor * 0.3
-        } else if (Math.random() < 0.3) {
-          beatType = "accent"
-          intensity = 0.4 + valenceFactor * 0.3
-          confidence = 0.5 + valenceFactor * 0.3
-        } else {
-          // Pula esta batida para criar variação
-          currentTime += baseBeatInterval
-          beatCount++
-          continue
+      // Remove efeito após metade do intervalo
+      setTimeout(() => {
+        if (borderRef.current) {
+          borderRef.current.style.boxShadow = "none"
+          borderRef.current.style.borderColor = "rgb(239, 68, 68)"
+          borderRef.current.style.borderWidth = "4px"
         }
-      }
-
-      // Adiciona variação temporal baseada na energia
-      const timeVariation = (Math.random() - 0.5) * 0.1 * (1 - energyFactor)
-      const actualTime = currentTime + timeVariation
-
-      // Adiciona variação na intensidade baseada na positividade
-      const intensityVariation = (Math.random() - 0.5) * 0.2 * valenceFactor
-      const finalIntensity = Math.max(0.1, Math.min(1.0, intensity + intensityVariation))
-
-      beats.push({
-        start: actualTime,
-        duration: baseBeatInterval * 0.5,
-        confidence: confidence,
-        intensity: finalIntensity,
-        type: beatType,
-      })
-
-      // Adiciona batidas extras para músicas muito dançantes
-      if (isDanceable && isHighEnergy && Math.random() < 0.4) {
-        const extraBeatTime = actualTime + baseBeatInterval * 0.5
-        if (extraBeatTime < durationSeconds) {
-          beats.push({
-            start: extraBeatTime,
-            duration: baseBeatInterval * 0.25,
-            confidence: 0.5,
-            intensity: 0.3 + energyFactor * 0.2,
-            type: "hihat",
-          })
-        }
-      }
-
-      currentTime += baseBeatInterval
-      beatCount++
+      }, interval / 2)
     }
 
-    console.log("🥁 Batidas geradas por tipo:", {
-      kick: beats.filter((b) => b.type === "kick").length,
-      snare: beats.filter((b) => b.type === "snare").length,
-      hihat: beats.filter((b) => b.type === "hihat").length,
-      accent: beats.filter((b) => b.type === "accent").length,
-      total: beats.length,
-    })
+    // Inicia pulsação imediata
+    pulse()
 
-    return beats.sort((a, b) => a.start - b.start)
+    // Configura intervalo de pulsação
+    const pulseInterval = setInterval(() => {
+      if (isSpotifyPlaying) {
+        pulse()
+      }
+    }, interval)
+
+    // Salva referência para poder parar depois
+    beatTimeoutsRef.current.push(pulseInterval as any)
+    setIsPlaying(true)
   }
 
   // Sincroniza batidas com o progresso atual da música
   const syncBeatsWithProgress = (progressMs: number) => {
-    if (!simulatedBeats.length || !isSpotifyPlaying) return
-
-    stopAllBeats()
-
-    const progressSeconds = progressMs / 1000
-    console.log("🎵 Sincronizando batidas a partir de:", progressSeconds, "segundos")
-
-    const upcomingBeats = simulatedBeats.filter((beat) => {
-      const beatTime = beat.start
-      return beatTime > progressSeconds && beatTime < progressSeconds + 5
-    })
-
-    console.log("🥁 Batidas próximas encontradas:", upcomingBeats.length)
-
-    upcomingBeats.forEach((beat, index) => {
-      const delay = (beat.start - progressSeconds) * 1000
-
-      if (delay > 0 && delay < 5000) {
-        const timeout = setTimeout(() => {
-          console.log(
-            `🥁 ${beat.type.toUpperCase()}! Tempo: ${beat.start.toFixed(2)}s, Intensidade: ${beat.intensity.toFixed(2)}`,
-          )
-          pulseOnBeat(beat)
-        }, delay)
-
-        beatTimeoutsRef.current.push(timeout)
-
-        if (index < 3) {
-          console.log(
-            `🥁 ${beat.type} ${index + 1}: tempo=${beat.start.toFixed(2)}s, delay=+${delay.toFixed(0)}ms, intensidade=${beat.intensity.toFixed(2)}`,
-          )
-        }
-      }
-    })
-
-    setIsPlaying(upcomingBeats.length > 0)
+    // This function can be removed or simplified
   }
 
   // Para todas as batidas agendadas
@@ -454,103 +351,7 @@ export default function AudioBeatDetector() {
 
   // Cria efeito visual na batida baseado no tipo e intensidade
   const pulseOnBeat = (beat: SimulatedBeat) => {
-    if (!borderRef.current) return
-
-    console.log(`🔥 PULSE ${beat.type.toUpperCase()}! Intensidade: ${beat.intensity.toFixed(2)}`)
-
-    // Calcula intensidade visual baseada no tipo de batida e intensidade
-    let baseIntensity = beat.intensity * 40
-    let glowSize = baseIntensity * 3
-    const opacity = 0.6 + beat.intensity * 0.4
-    let duration = 150
-
-    // Ajusta efeito baseado no tipo de batida
-    switch (beat.type) {
-      case "kick":
-        // Kick: efeito forte e vermelho
-        baseIntensity *= 1.5
-        glowSize *= 1.3
-        duration = 200 + beat.intensity * 300
-        break
-      case "snare":
-        // Snare: efeito médio e branco/amarelo
-        baseIntensity *= 1.2
-        duration = 150 + beat.intensity * 200
-        break
-      case "hihat":
-        // Hi-hat: efeito rápido e azul
-        baseIntensity *= 0.8
-        glowSize *= 0.7
-        duration = 100 + beat.intensity * 100
-        break
-      case "accent":
-        // Accent: efeito colorido baseado na intensidade
-        baseIntensity *= 1.1
-        duration = 180 + beat.intensity * 250
-        break
-    }
-
-    // Define cores baseadas no tipo de batida
-    let red, green, blue
-    switch (beat.type) {
-      case "kick":
-        // Vermelho intenso para kick
-        red = 255
-        green = Math.floor(50 + beat.intensity * 100)
-        blue = Math.floor(50 + beat.intensity * 100)
-        break
-      case "snare":
-        // Branco/amarelo para snare
-        red = 255
-        green = 255
-        blue = Math.floor(100 + beat.intensity * 155)
-        break
-      case "hihat":
-        // Azul/ciano para hi-hat
-        red = Math.floor(100 + beat.intensity * 155)
-        green = Math.floor(150 + beat.intensity * 105)
-        blue = 255
-        break
-      case "accent":
-        // Cores variadas para accent baseadas na intensidade
-        if (beat.intensity > 0.7) {
-          red = 255
-          green = 100
-          blue = 255 // Magenta
-        } else if (beat.intensity > 0.4) {
-          red = 100
-          green = 255
-          blue = 100 // Verde
-        } else {
-          red = 255
-          green = 150
-          blue = 0 // Laranja
-        }
-        break
-      default:
-        red = 255
-        green = 68
-        blue = 68
-    }
-
-    // Aplica o efeito visual
-    borderRef.current.style.boxShadow = `
-      0 0 ${glowSize}px rgba(${red}, ${green}, ${blue}, ${opacity}),
-      0 0 ${glowSize * 2}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.7}),
-      0 0 ${glowSize * 3}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.4}),
-      0 0 ${glowSize * 4}px rgba(${red}, ${green}, ${blue}, ${opacity * 0.2})
-    `
-    borderRef.current.style.borderColor = `rgba(${red}, ${green}, ${blue}, ${opacity})`
-    borderRef.current.style.borderWidth = `${4 + beat.intensity * 6}px`
-
-    // Remove o efeito após a duração
-    setTimeout(() => {
-      if (borderRef.current) {
-        borderRef.current.style.boxShadow = "none"
-        borderRef.current.style.borderColor = "rgb(239, 68, 68)"
-        borderRef.current.style.borderWidth = "4px"
-      }
-    }, duration)
+    // This function can be removed
   }
 
   const fetchSpotifyUser = async (token: string) => {
@@ -594,6 +395,7 @@ export default function AudioBeatDetector() {
       "user-read-recently-played",
       "playlist-read-private",
       "playlist-read-collaborative",
+      "user-library-read", // Adiciona este scope
     ].join(" ")
 
     const state = Math.random().toString(36).substring(2, 15)
