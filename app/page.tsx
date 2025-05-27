@@ -577,7 +577,10 @@ export default function AudioBeatDetector() {
 
   const handleSpotifyLogin = () => {
     const clientId = "384115184ce848c1bf39bdd8d0209f83"
-    const redirectUri = "https://spotify-eight-green.vercel.app/api/spotify/callback"
+
+    // Tenta usar a URL atual como base para o redirect
+    const currentUrl = window.location.origin
+    const redirectUri = `${currentUrl}/api/spotify/callback`
 
     localStorage.removeItem("spotify_token")
 
@@ -605,6 +608,7 @@ export default function AudioBeatDetector() {
     authUrl.searchParams.append("show_dialog", "true")
 
     console.log("🔍 URL de autenticação:", authUrl.toString())
+    console.log("🔍 Redirect URI:", redirectUri)
     window.location.href = authUrl.toString()
   }
 
