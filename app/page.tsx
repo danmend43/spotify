@@ -33,6 +33,7 @@ export default function AudioBeatDetector() {
   const [isSpotifyPlaying, setIsSpotifyPlaying] = useState(false)
   const [audioFeatures, setAudioFeatures] = useState<SpotifyAudioFeatures | null>(null)
   const [currentProgress, setCurrentProgress] = useState<number>(0)
+  const [isPulsing, setIsPulsing] = useState(false)
 
   const borderRef = useRef<HTMLDivElement | null>(null)
   const spotifyIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -98,9 +99,11 @@ export default function AudioBeatDetector() {
               }
 
               setIsSpotifyPlaying(true)
+              setIsPulsing(true)
               setCurrentProgress(data.progress_ms || 0)
             } else {
               setIsSpotifyPlaying(false)
+              setIsPulsing(false)
               stopPulse()
             }
           } else if (response.status === 204) {
@@ -189,7 +192,7 @@ export default function AudioBeatDetector() {
     }
   }
 
-  // Inicia pulsação simples baseada no BPM
+  // Inicia pulsação sincronizada baseada no BPM
   const startBPMPulse = (bpm: number, energy = 0.6) => {
     stopPulse() // Para qualquer pulsação anterior
 
@@ -199,8 +202,8 @@ export default function AudioBeatDetector() {
 
     // Ajusta intensidade baseada na energia
     const intensity = Math.max(0.3, energy)
-    const glowSize = 20 + intensity * 30 // 20-50px
-    const glowIntensity = 10 + intensity * 20 // 10-30px
+    const glowSize = 15 + intensity * 25 // 15-40px
+    const glowIntensity = 8 + intensity * 15 // 8-23px
 
     // Cores baseadas na energia
     let color = "#1DB954" // Verde Spotify padrão
@@ -212,39 +215,60 @@ export default function AudioBeatDetector() {
       color = "#45B7D1" // Azul para baixa energia
     }
 
-    // Função de pulso
+    // Sincroniza com o progresso da música
+    const syncWithProgress = () => {
+      if (!isSpotifyPlaying || !currentProgress) return interval
+
+      // Calcula quantas batidas já passaram desde o início da música
+      const beatsElapsed = currentProgress / interval
+      const nextBeatTime = Math.ceil(beatsElapsed) * interval
+      const timeToNextBeat = nextBeatTime - currentProgress
+
+      return Math.max(50, timeToNextBeat) // Mínimo 50ms para evitar problemas
+    }
+
+    // Função de pulso melhorada
     const pulse = () => {
       if (!borderRef.current || !isSpotifyPlaying) return
 
       console.log("🔥 PULSE!")
 
-      // Aplica efeito visual
+      // Aplica efeito visual mais suave
+      borderRef.current.style.transition = "all 0.1s ease-out"
       borderRef.current.style.boxShadow = `0 0 ${glowSize}px ${glowIntensity}px ${color}`
       borderRef.current.style.borderColor = color
-      borderRef.current.style.borderWidth = `${4 + intensity * 4}px`
+      borderRef.current.style.borderWidth = `${3 + intensity * 3}px`
+      borderRef.current.style.transform = `scale(${1 + intensity * 0.05})`
 
-      // Remove efeito após metade do intervalo
+      // Remove efeito após 40% do intervalo (mais natural)
       setTimeout(() => {
         if (borderRef.current) {
-          borderRef.current.style.boxShadow = "none"
+          borderRef.current.style.transition = "all 0.3s ease-out"
+          borderRef.current.style.boxShadow = "0 0 5px 2px rgba(239, 68, 68, 0.3)"
           borderRef.current.style.borderColor = "rgb(239, 68, 68)"
-          borderRef.current.style.borderWidth = "4px"
+          borderRef.current.style.borderWidth = "3px"
+          borderRef.current.style.transform = "scale(1)"
         }
-      }, interval / 2)
+      }, interval * 0.4)
     }
 
-    // Inicia pulsação imediata
-    pulse()
+    // Primeira pulsação sincronizada
+    const initialDelay = syncWithProgress()
+    setTimeout(() => {
+      pulse()
 
-    // Configura intervalo de pulsação
-    pulseIntervalRef.current = setInterval(() => {
-      if (isSpotifyPlaying) {
-        pulse()
-      }
-    }, interval)
+      // Configura intervalo regular após sincronização
+      pulseIntervalRef.current = setInterval(() => {
+        if (isSpotifyPlaying) {
+          pulse()
+        } else {
+          stopPulse()
+        }
+      }, interval)
+    }, initialDelay)
   }
 
-  // Para pulsação
+  // Para pulsação melhorada
   const stopPulse = () => {
     if (pulseIntervalRef.current) {
       clearInterval(pulseIntervalRef.current)
@@ -252,9 +276,11 @@ export default function AudioBeatDetector() {
     }
 
     if (borderRef.current) {
-      borderRef.current.style.boxShadow = "none"
+      borderRef.current.style.transition = "all 0.5s ease-out"
+      borderRef.current.style.boxShadow = "0 0 5px 2px rgba(239, 68, 68, 0.3)"
       borderRef.current.style.borderColor = "rgb(239, 68, 68)"
-      borderRef.current.style.borderWidth = "4px"
+      borderRef.current.style.borderWidth = "3px"
+      borderRef.current.style.transform = "scale(1)"
     }
   }
 
