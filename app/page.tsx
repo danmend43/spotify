@@ -121,7 +121,41 @@ export default function AudioBeatDetector() {
     }
   }, [spotifyToken, currentTrack])
 
-  // Busca BPM e inicia pulsação com fallback inteligente
+  // Estima BPM baseado no nome da música e artista
+  const estimateBPMFromTrack = (track: SpotifyTrack | null): number => {
+    if (!track) return 120
+
+    const trackName = track.name.toLowerCase()
+    const artistName = track.artists[0]?.name.toLowerCase() || ""
+    const combined = `${trackName} ${artistName}`
+
+    // Palavras que indicam música lenta (60-90 BPM)
+    const slowKeywords = ["ballad", "slow", "love", "acoustic", "piano", "sad", "emotional", "calm"]
+
+    // Palavras que indicam música rápida (140-180 BPM)
+    const fastKeywords = ["dance", "electronic", "techno", "house", "edm", "dubstep", "drum", "bass", "party", "club"]
+
+    // Palavras que indicam música média-rápida (120-140 BPM)
+    const mediumFastKeywords = ["rock", "pop", "indie", "alternative", "punk", "metal"]
+
+    // Verifica palavras-chave
+    if (slowKeywords.some((keyword) => combined.includes(keyword))) {
+      return 75 + Math.random() * 15 // 75-90 BPM
+    }
+
+    if (fastKeywords.some((keyword) => combined.includes(keyword))) {
+      return 140 + Math.random() * 40 // 140-180 BPM
+    }
+
+    if (mediumFastKeywords.some((keyword) => combined.includes(keyword))) {
+      return 120 + Math.random() * 20 // 120-140 BPM
+    }
+
+    // Padrão: música média
+    return 110 + Math.random() * 20 // 110-130 BPM
+  }
+
+  // Busca BPM e inicia pulsação
   const fetchBPMAndStartPulse = async (trackId: string) => {
     if (!spotifyToken) return
 
@@ -137,60 +171,21 @@ export default function AudioBeatDetector() {
       if (response.ok) {
         const features = await response.json()
         setAudioFeatures(features)
-        console.log("✅ BPM real obtido:", Math.round(features.tempo))
+        console.log("✅ BPM recebido:", Math.round(features.tempo))
+
+        // Inicia pulsação baseada no BPM
         startBPMPulse(features.tempo, features.energy)
       } else {
-        console.warn(`⚠️ API retornou ${response.status}, usando estimativa inteligente`)
-        const estimatedFeatures = estimateBPMFromTrack(currentTrack)
-        setAudioFeatures(estimatedFeatures)
-        console.log("🧠 BPM estimado:", Math.round(estimatedFeatures.tempo))
-        startBPMPulse(estimatedFeatures.tempo, estimatedFeatures.energy)
+        console.log("⚠️ API retornou 403, usando estimativa inteligente")
+        const estimatedBPM = estimateBPMFromTrack(currentTrack)
+        console.log("🧠 BPM estimado:", estimatedBPM)
+        startBPMPulse(estimatedBPM, 0.6)
       }
     } catch (error) {
-      console.warn("⚠️ Erro na API, usando estimativa:", error)
-      const estimatedFeatures = estimateBPMFromTrack(currentTrack)
-      setAudioFeatures(estimatedFeatures)
-      console.log("🧠 BPM estimado:", Math.round(estimatedFeatures.tempo))
-      startBPMPulse(estimatedFeatures.tempo, estimatedFeatures.energy)
-    }
-  }
-
-  // Estima BPM baseado no nome e artista da música
-  const estimateBPMFromTrack = (track: SpotifyTrack | null): SpotifyAudioFeatures => {
-    if (!track) {
-      return { tempo: 120, energy: 0.6, danceability: 0.6, valence: 0.6 }
-    }
-
-    const trackName = track.name.toLowerCase()
-    const artistName = track.artists[0]?.name.toLowerCase() || ""
-    const combined = `${trackName} ${artistName}`
-
-    // Palavras que indicam músicas lentas
-    const slowWords = ["ballad", "acoustic", "love", "slow", "sad", "emotional", "piano", "unplugged"]
-    // Palavras que indicam músicas rápidas
-    const fastWords = ["dance", "electronic", "techno", "house", "dubstep", "drum", "bass", "party", "club"]
-    // Palavras que indicam rock/metal
-    const rockWords = ["rock", "metal", "punk", "hardcore", "alternative", "grunge"]
-
-    let estimatedBPM = 120 // Padrão
-    let estimatedEnergy = 0.6
-
-    if (slowWords.some((word) => combined.includes(word))) {
-      estimatedBPM = 70 + Math.random() * 20 // 70-90 BPM
-      estimatedEnergy = 0.2 + Math.random() * 0.3 // 0.2-0.5
-    } else if (fastWords.some((word) => combined.includes(word))) {
-      estimatedBPM = 130 + Math.random() * 40 // 130-170 BPM
-      estimatedEnergy = 0.7 + Math.random() * 0.3 // 0.7-1.0
-    } else if (rockWords.some((word) => combined.includes(word))) {
-      estimatedBPM = 110 + Math.random() * 30 // 110-140 BPM
-      estimatedEnergy = 0.6 + Math.random() * 0.3 // 0.6-0.9
-    }
-
-    return {
-      tempo: estimatedBPM,
-      energy: estimatedEnergy,
-      danceability: 0.5 + Math.random() * 0.3,
-      valence: 0.4 + Math.random() * 0.4,
+      console.error("❌ Erro na busca de BPM:", error)
+      // Fallback: usa BPM padrão
+      console.log("🔄 Usando BPM padrão: 120")
+      startBPMPulse(120, 0.6)
     }
   }
 
